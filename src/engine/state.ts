@@ -47,8 +47,8 @@ import {
   validatePlanner,
 } from './planner';
 import { filterAvailableActions } from './traitEffects';
-import { applyTurningPoint, checkTraitFormation } from './traits';
-import type { ActionRecord, Effect, GameState, LifeGenRequest, PlayerAction, TimelineEntry } from './types';
+import { applyTurningPoint, checkTraitFormation, translateEvidenceKey } from './traits';
+import type { ActionRecord, ActiveToast, Effect, GameState, LifeGenRequest, PlayerAction, TimelineEntry } from './types';
 
 export const ENGINE_VERSION = 2;
 
@@ -132,13 +132,6 @@ function buildGatedActionEffects(actionId: string, energyCost: number, freeTimeC
         { type: 'ChangeSkill', skill: 'socializing', delta: 1.5, reason: 'ฝึกพูดบนเวที' },
         { type: 'RecordEvidence', key: 'praised', amount: 3, reason: 'ได้รับเสียงตอบรับบนเวที' },
       ];
-    case 'apply_overtime':
-      return [
-        ...baseCost,
-        { type: 'AddMoney', amount: 450, category: 'side', reason: 'ค่าล่วงเวลาจากการอาสาทำโอที' },
-        { type: 'ChangeResource', resource: 'stress', delta: 4, reason: 'ภาระงานโอทีเพิ่มความล้า' },
-        { type: 'RecordEvidence', key: 'self_discipline', amount: 2, reason: 'อาสาลุยงานเพิ่มอย่างมีวินัย' },
-      ];
     case 'social_networking':
       return [
         ...baseCost,
@@ -163,6 +156,91 @@ function buildGatedActionEffects(actionId: string, energyCost: number, freeTimeC
     default:
       return baseCost;
   }
+}
+
+const UNLOCK_ACTIVITY_FLAG_LABELS_TH: Record<string, string> = {
+  stream_unlocked: 'สตรีม / ทำช่องคอนเทนต์',
+  unlock_activity_streaming: 'สตรีม / ทำช่องคอนเทนต์',
+  competition_unlocked: 'ลงแข่ง / กิจกรรมระดับสูง',
+  unlock_activity_competition: 'ลงแข่ง / กิจกรรมระดับสูง',
+  freelance_unlocked: 'รับงานฟรีแลนซ์อิสระ',
+  has_child: 'ดูแลลูกและครอบครัว',
+};
+
+function mapPromptCategoryToToastCategory(category: string): ActiveToast['category'] {
+  if (
+    category === 'work' ||
+    category === 'romance' ||
+    category === 'family' ||
+    category === 'health' ||
+    category === 'finance' ||
+    category === 'social' ||
+    category === 'quirky' ||
+    category === 'system' ||
+    category === 'milestone'
+  ) {
+    return category;
+  }
+  if (category === 'economy') return 'finance';
+  return 'milestone';
+}
+
+function attachStoryletFeedbackToast(
+  prevState: GameState,
+  nextState: GameState,
+  storyletId?: string,
+  promptCategory = 'milestone'
+): ActiveToast | null {
+  const prevFlags = prevState.character.flags ?? {};
+  const nextFlags = nextState.character.flags ?? {};
+  const unlockedLabels: string[] = [];
+
+  for (const [flagKey, isEnabled] of Object.entries(nextFlags)) {
+    if (!isEnabled || prevFlags[flagKey]) continue;
+    if (UNLOCK_ACTIVITY_FLAG_LABELS_TH[flagKey]) {
+      unlockedLabels.push(UNLOCK_ACTIVITY_FLAG_LABELS_TH[flagKey]);
+    } else if (flagKey.startsWith('unlock_activity_')) {
+      unlockedLabels.push('กิจกรรมใหม่ในตารางชีวิต');
+    }
+  }
+
+  const prevEv = prevState.evidence ?? {};
+  const nextEv = nextState.evidence ?? {};
+  const gainedEvidenceLabels: string[] = [];
+  for (const [evKey, nextVal] of Object.entries(nextEv)) {
+    const prevVal = prevEv[evKey] ?? 0;
+    if ((nextVal ?? 0) > prevVal + 0.01) {
+      gainedEvidenceLabels.push(translateEvidenceKey(evKey));
+    }
+  }
+
+  const uniqueUnlocks = Array.from(new Set(unlockedLabels));
+  const uniqueEvidence = Array.from(new Set(gainedEvidenceLabels));
+  if (uniqueUnlocks.length === 0 && uniqueEvidence.length === 0) {
+    return nextState.activeToast ?? null;
+  }
+
+  const title =
+    uniqueUnlocks.length > 0
+      ? UI_TEXT.STORYLET_TOAST.unlockTitle
+      : UI_TEXT.STORYLET_TOAST.evidenceTitle;
+  const parts: string[] = [];
+  if (uniqueUnlocks.length > 0) {
+    parts.push(UI_TEXT.STORYLET_TOAST.unlockPrefix(uniqueUnlocks));
+  }
+  if (uniqueEvidence.length > 0) {
+    parts.push(UI_TEXT.STORYLET_TOAST.evidencePrefix(uniqueEvidence.slice(0, 3)));
+  }
+
+  return {
+    id: `toast_storylet_outcome_${nextState.date.totalDays}_${nextState.timeline.length}`,
+    title,
+    description: parts.join(' · '),
+    tier: 'T1',
+    category: mapPromptCategoryToToastCategory(promptCategory),
+    expiresAtTotalDay: nextState.date.totalDays + 7,
+    storyletId,
+  };
 }
 
 export function dispatchPlayerAction(state: GameState, action: PlayerAction): ActionResult {
@@ -436,11 +514,18 @@ export function dispatchPlayerAction(state: GameState, action: PlayerAction): Ac
         return { state, accepted: false, message: choice.disabledReason ?? 'ตัวเลือกนี้ยังไม่พร้อมใช้งาน' };
       }
 
+      const promptStoryletId = state.pendingPrompt.storyletId;
+      const promptCategory = state.pendingPrompt.category;
+
       // If storylet event, resolve via director to handle twists, cash costs, and StartScene
-      if (state.pendingPrompt.storyletId || choice.twistChance || choice.costCash) {
-        const next = resolveStoryletChoice(state, action.choiceId);
+      if (promptStoryletId || choice.twistChance || choice.costCash) {
+        let next = resolveStoryletChoice(state, action.choiceId);
         next.economy = recalculateEconomyDerived(next.character, next.economy);
         next.character.indices = computeLifeIndices(next.character, next.economy);
+        next = {
+          ...next,
+          activeToast: attachStoryletFeedbackToast(state, next, promptStoryletId, promptCategory),
+        };
         return { state: next, accepted: true };
       }
 
@@ -477,6 +562,10 @@ export function dispatchPlayerAction(state: GameState, action: PlayerAction): Ac
       });
       next.economy = recalculateEconomyDerived(next.character, next.economy);
       next.character.indices = computeLifeIndices(next.character, next.economy);
+      next = {
+        ...next,
+        activeToast: attachStoryletFeedbackToast(state, next, promptStoryletId, promptCategory),
+      };
       return { state: next, accepted: true };
     }
 
@@ -641,17 +730,23 @@ export function dispatchPlayerAction(state: GameState, action: PlayerAction): Ac
       }
 
       const effects = buildGatedActionEffects(def.id, def.energyCost, def.freeTimeCost);
+      const effectsSummary = summarizeEffects(effects);
       let next = applyEffects(state, effects, true);
       next = checkTraitFormation(next, 'weekly', true);
       next = appendTimeline(next, {
         category: 'life',
         title: `กิจกรรมเฉพาะตัว: ${def.labelTh}`,
         description: def.descriptionTh,
-        effectsSummary: summarizeEffects(effects),
+        effectsSummary,
       });
       next.economy = recalculateEconomyDerived(next.character, next.economy);
       next.character.indices = computeLifeIndices(next.character, next.economy);
-      return { state: next, accepted: true, message: `ทำกิจกรรม "${def.labelTh}" สำเร็จ` };
+      const summaryText = effectsSummary.length > 0 ? effectsSummary.join(' · ') : def.rewardEffectsSummary;
+      return {
+        state: next,
+        accepted: true,
+        message: `${def.labelTh} (${summaryText})`,
+      };
     }
 
     case 'DISMISS_TOAST': {

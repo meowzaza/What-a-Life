@@ -8,6 +8,7 @@ import {
   TEMPERAMENTS,
   WEALTH_TIERS,
 } from '../../data/thaiData';
+import { UI_TEXT } from '../../data/uiText';
 import {
   APPEARANCE_TAG_CATEGORY_LABELS,
   APPEARANCE_TAG_CATEGORY_ORDER,
@@ -15,11 +16,9 @@ import {
   getEligibleAppearancePool,
   isAppearanceValidForSelection,
 } from '../../engine/appearance';
-import { generateLife, getMaxPlausibleEducation } from '../../engine/lifegen';
+import { generateLife } from '../../engine/lifegen';
 import type {
-  AtAgeLifeOptions,
   CustomLifeOptions,
-  EducationLevel,
   FamilyStructure,
   FamilyWealthTier,
   Gender,
@@ -30,6 +29,7 @@ import type {
   RegionId,
   TemperamentId,
 } from '../../engine/types';
+import { loadAutosave, type SaveSlotData } from '../../engine/save';
 import { Avatar } from '../art/Avatar';
 import {
   PixelCatMascot,
@@ -43,6 +43,7 @@ import { CharacterGalleryModal } from '../components/CharacterGalleryModal';
 interface LifeGenScreenProps {
   onStartLife: (request: LifeGenRequest) => void;
   onOpenLoadModal: () => void;
+  onLoadAutosave?: (slot: SaveSlotData) => void;
   onOpenFontSettings: () => void;
   isDark: boolean;
   reduceFx: boolean;
@@ -51,17 +52,6 @@ interface LifeGenScreenProps {
 }
 
 const MAX_REROLLS = 5;
-
-const ALL_EDUCATIONS: EducationLevel[] = [
-  'none',
-  'primary',
-  'lower_secondary',
-  'upper_secondary',
-  'vocational',
-  'bachelor',
-  'master',
-  'doctorate',
-];
 
 const START_POINT_OPTIONS: { id: RandomStartPoint; label: string; sub: string }[] = [
   { id: 'birth', label: 'เกิดใหม่ (0 ปี)', sub: 'เริ่มจากวัยทารก' },
@@ -83,6 +73,7 @@ function ModeCardArt({ mode }: { mode: LifeGenMode }) {
 export function LifeGenScreen({
   onStartLife,
   onOpenLoadModal,
+  onLoadAutosave,
   onOpenFontSettings,
   isDark,
   reduceFx,
@@ -94,6 +85,17 @@ export function LifeGenScreen({
   const [seed, setSeed] = useState<number>(() => Math.floor(Date.now() % 10000000));
   const [rerollsLeft, setRerollsLeft] = useState<number>(MAX_REROLLS);
   const [diceSpinKey, setDiceSpinKey] = useState(0);
+  const [autosaveSlot, setAutosaveSlot] = useState<SaveSlotData | null>(null);
+
+  useEffect(() => {
+    void loadAutosave()
+      .then((slot) => {
+        if (slot && slot.meta && slot.snapshot?.character?.isAlive) {
+          setAutosaveSlot(slot);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Mode 1: Random start point (ค่าเริ่มต้นเกิดใหม่ 0 ปี)
   const [randomStartPoint, setRandomStartPoint] = useState<RandomStartPoint>('birth');
@@ -128,11 +130,6 @@ export function LifeGenScreen({
   const [randHealth, setRandHealth] = useState(true);
   const [geneticHealth, setGeneticHealth] = useState(70);
 
-  // Mode 3: At-Age state
-  const [targetAge, setTargetAge] = useState<number>(25);
-  const [atAgeEdu, setAtAgeEdu] = useState<EducationLevel | 'auto'>('auto');
-  const [wealthFocus, setWealthFocus] = useState<AtAgeLifeOptions['wealthFocus']>('average');
-  const [atAgeSeed, setAtAgeSeed] = useState<number>(2568001);
   const [appearanceOverride, setAppearanceOverride] = useState<string | undefined>(undefined);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [previewTagsExpanded, setPreviewTagsExpanded] = useState(false);
@@ -141,44 +138,32 @@ export function LifeGenScreen({
 
   useEffect(() => {
     setAppearanceOverride(undefined);
-  }, [mode, seed, atAgeSeed, randomStartPoint]);
+  }, [mode, seed, randomStartPoint]);
 
   const currentRequest: LifeGenRequest = useMemo(() => {
     if (mode === 'random') {
       return { mode: 'random', seed, randomStartPoint, appearanceOverride };
     }
-    if (mode === 'custom') {
-      const custom: CustomLifeOptions = {
-        startingAge,
-        firstName: randName ? undefined : firstName,
-        lastName: randName ? undefined : lastName,
-        nickname: randName ? undefined : nickname,
-        gender: randGender ? undefined : gender,
-        region: randRegion ? undefined : region,
-        province: randRegion || randProvince ? undefined : province,
-        familyWealth: randWealth ? undefined : familyWealth,
-        familyStructure: randFamilyStruct ? undefined : familyStructure,
-        parentEducation: randParentEdu ? undefined : parentEducation,
-        temperament: randTemp ? undefined : temperament,
-        geneticHealth: randHealth ? undefined : geneticHealth,
-      };
-      return { mode: 'custom', seed, custom, appearanceOverride };
-    }
-    const atAge: AtAgeLifeOptions = {
-      targetAge,
+    const custom: CustomLifeOptions = {
+      startingAge,
+      firstName: randName ? undefined : firstName,
+      lastName: randName ? undefined : lastName,
+      nickname: randName ? undefined : nickname,
       gender: randGender ? undefined : gender,
       region: randRegion ? undefined : region,
       province: randRegion || randProvince ? undefined : province,
-      education: atAgeEdu === 'auto' ? undefined : atAgeEdu,
-      wealthFocus,
+      familyWealth: randWealth ? undefined : familyWealth,
+      familyStructure: randFamilyStruct ? undefined : familyStructure,
+      parentEducation: randParentEdu ? undefined : parentEducation,
+      temperament: randTemp ? undefined : temperament,
+      geneticHealth: randHealth ? undefined : geneticHealth,
     };
-    return { mode: 'at_age', seed: atAgeSeed, atAge, appearanceOverride };
+    return { mode: 'custom', seed, custom, appearanceOverride };
   }, [
     mode,
     seed,
     randomStartPoint,
     startingAge,
-    atAgeSeed,
     randName,
     firstName,
     lastName,
@@ -199,14 +184,10 @@ export function LifeGenScreen({
     temperament,
     randHealth,
     geneticHealth,
-    targetAge,
-    atAgeEdu,
-    wealthFocus,
     appearanceOverride,
   ]);
 
   const previewLife = useMemo(() => generateLife(currentRequest), [currentRequest]);
-  const maxEduForTargetAge = getMaxPlausibleEducation(targetAge);
 
   // หากผู้เล่นเปลี่ยนอายุหรือเพศจนตัวละครที่เลือกไว้ไม่เข้าเกณฑ์แล้ว ให้รีเซ็ตกลับเป็นสุ่มตามเกณฑ์ใหม่อัตโนมัติ
   useEffect(() => {
@@ -363,6 +344,33 @@ export function LifeGenScreen({
         {/* STEP 1: เลือกวิธีเริ่มต้นชีวิต */}
         {step === 1 && (
           <div className="space-y-4">
+            {autosaveSlot && onLoadAutosave && (
+              <button
+                type="button"
+                onClick={() => onLoadAutosave(autosaveSlot)}
+                className="game-btn w-full p-4 bg-[#FFE58F] dark:bg-[#7A5B1F] text-left flex items-center gap-3.5 border-2 border-[#4E3B69] dark:border-[#7662AC] shadow-[0_4px_0_#4E3B69] hover:brightness-105 transition-all"
+              >
+                <div className="w-12 h-12 bg-[#FFFDFB] dark:bg-[#221B3B] border-2 border-[#4E3B69] flex items-center justify-center shrink-0">
+                  <PixelIcon name="play" size={24} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[11px] font-bold text-[#8A5A00] dark:text-[#FDE68A] uppercase tracking-wide">
+                    {UI_TEXT.AUTOSAVE.resumeEyebrow}
+                  </div>
+                  <div className="font-display font-extrabold text-base sm:text-lg text-[#3D2D52] dark:text-[#FFF6FA] truncate">
+                    {UI_TEXT.AUTOSAVE.resumeButton(
+                      autosaveSlot.meta.characterName,
+                      autosaveSlot.meta.ageYears
+                    )}
+                  </div>
+                  <div className="text-xs text-[#5A4773] dark:text-[#DDD6FE] font-num">
+                    {autosaveSlot.meta.dateLabel} · เงินสด {autosaveSlot.meta.cash.toLocaleString('th-TH')} ฿
+                  </div>
+                </div>
+                <PixelIcon name="arrow_right" size={20} className="shrink-0" />
+              </button>
+            )}
+
             <div className="text-center space-y-1.5">
               <div className="inline-flex items-center justify-center gap-2">
                 <PixelWing animate={!reduceFx} />
@@ -381,21 +389,15 @@ export function LifeGenScreen({
                 [
                   {
                     id: 'random' as LifeGenMode,
-                    title: '1. สุ่มชะตาฟ้าลิขิต',
+                    title: '1. สุ่มชีวิตใหม่',
                     desc: 'ทอยลูกเต๋าเกิดใหม่ตามสถิติจริงของคนไทย สุ่มได้สูงสุด 5 ครั้ง',
                     accent: 'bg-[#FFF3BF] dark:bg-[#4A3A1B]',
                   },
                   {
                     id: 'custom' as LifeGenMode,
-                    title: '2. ปรับแต่งชีวิตเอง',
+                    title: '2. กำหนดชะตาเอง',
                     desc: 'เลือกอายุ 0–65 ปี เพศ บ้านเกิด ฐานะ พร้อมเลือกหน้าตาตัวละครจากแกลเลอรีได้เอง',
                     accent: 'bg-[#DCEBFF] dark:bg-[#223F7D]/60',
-                  },
-                  {
-                    id: 'at_age' as LifeGenMode,
-                    title: '3. ข้ามไปเริ่มกลางทาง',
-                    desc: 'วาร์ปไปอายุ 12–60 ปี พร้อมประวัติ ฐานะ และเลือกหน้าตาตัวละครตามช่วงวัยได้',
-                    accent: 'bg-[#EAE2FF] dark:bg-[#442C7A]/65',
                   },
                 ] as const
               ).map((item) => {
@@ -993,179 +995,6 @@ export function LifeGenScreen({
                       <span className="font-num font-bold text-sm w-10 text-right">{geneticHealth}</span>
                     </div>
                   )}
-                </div>
-              </div>
-            )}
-
-            {mode === 'at_age' && (
-              <div className="game-card p-5 space-y-4">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <h2 className="font-display font-extrabold text-lg">เริ่มตามช่วงวัย</h2>
-                    <p className="text-xs text-[#76658D] dark:text-[#CBBFE3]">
-                      สร้างอดีต การศึกษา และจุดเปลี่ยน 3–4 อย่างให้สมจริง
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setAtAgeSeed((s) => (s + 5431) % 99999999)}
-                    className="game-btn px-3 bg-[#FFF3BF] text-[#3D2D52] text-xs font-display font-bold inline-flex items-center gap-1.5"
-                  >
-                    <PixelIcon name="sparkle" size={16} />
-                    <span>สุ่มอดีตใหม่</span>
-                  </button>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="font-display font-bold text-sm">
-                      อายุเริ่มต้น: <span className="font-num text-[#BD346B] dark:text-[#FFB8D4]">{targetAge} ปี</span>
-                    </span>
-                    <div className="flex gap-1.5">
-                      {[15, 18, 25, 40].map((a) => (
-                        <button
-                          key={a}
-                          type="button"
-                          onClick={() => setTargetAge(a)}
-                          className={`px-3 py-1 border-2 text-xs font-bold font-num ${
-                            targetAge === a
-                              ? 'bg-[#FFE58F] text-[#3D2D52] border-[#4E3B69]'
-                              : 'bg-[#FFFDFB] dark:bg-[#352B59] border-transparent'
-                          }`}
-                        >
-                          {a} ปี
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <input
-                    type="range"
-                    min={12}
-                    max={60}
-                    value={targetAge}
-                    onChange={(e) => setTargetAge(Number(e.target.value))}
-                    className="w-full accent-[#FF8DA8]"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-bold block mb-1">วุฒิการศึกษา</label>
-                    <select
-                      value={atAgeEdu}
-                      onChange={(e) => setAtAgeEdu(e.target.value as EducationLevel | 'auto')}
-                      className="w-full px-3 py-2 border-2 border-[#4E3B69] dark:border-[#7662AC] bg-[#FFFDFB] dark:bg-[#221B3B] text-sm"
-                    >
-                      <option value="auto">ให้ระบบเลือกตามวัย</option>
-                      {ALL_EDUCATIONS.map((edu) => (
-                        <option key={edu} value={edu}>
-                          {EDUCATION_LABELS[edu]}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="text-[11px] text-[#76658D] dark:text-[#CBBFE3] mt-1">
-                      เพดานวัย {targetAge} ปี: {EDUCATION_LABELS[maxEduForTargetAge]}
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-bold block mb-1">สถานะการเงินสะสม</label>
-                    <select
-                      value={wealthFocus}
-                      onChange={(e) => setWealthFocus(e.target.value as AtAgeLifeOptions['wealthFocus'])}
-                      className="w-full px-3 py-2 border-2 border-[#4E3B69] dark:border-[#7662AC] bg-[#FFFDFB] dark:bg-[#221B3B] text-sm"
-                    >
-                      <option value="struggling">ชักหน้าไม่ถึงหลัง / มีหนี้ติดตัว</option>
-                      <option value="average">พอประคองตัวได้ตามฐานะ</option>
-                      <option value="comfortable">มีเงินออมตั้งหลัก</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* เพศและภูมิภาคสำหรับเริ่มกลางทาง (ใช้กรองตัวละครในแกลเลอรีได้ด้วย) */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  <div className="px-inset p-3 space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="font-display font-bold text-xs">เพศ</span>
-                      <label className="flex items-center gap-1 text-xs cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={randGender}
-                          onChange={(e) => setRandGender(e.target.checked)}
-                          className="accent-[#FF8DA8]"
-                        />
-                        <span>สุ่ม</span>
-                      </label>
-                    </div>
-                    {!randGender && (
-                      <select
-                        value={gender}
-                        onChange={(e) => setGender(e.target.value as Gender)}
-                        className="w-full px-2.5 py-1.5 border-2 border-[#4E3B69] dark:border-[#7662AC] bg-[#FFFDFB] dark:bg-[#2A2247] text-xs"
-                      >
-                        <option value="male">ชาย</option>
-                        <option value="female">หญิง</option>
-                        <option value="nonbinary">นอนไบนารี</option>
-                      </select>
-                    )}
-                  </div>
-
-                  <div className="px-inset p-3 space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="font-display font-bold text-xs">ภูมิภาค / จังหวัด</span>
-                      <label className="flex items-center gap-1 text-xs cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={randRegion}
-                          onChange={(e) => setRandRegion(e.target.checked)}
-                          className="accent-[#FF8DA8]"
-                        />
-                        <span>สุ่ม</span>
-                      </label>
-                    </div>
-                    {!randRegion && (
-                      <div className="space-y-1.5">
-                        <select
-                          value={region}
-                          onChange={(e) => {
-                            const rId = e.target.value as RegionId;
-                            setRegion(rId);
-                            const rObj = REGIONS.find((r) => r.id === rId);
-                            if (rObj) setProvince(rObj.provinces[0]);
-                          }}
-                          className="w-full px-2.5 py-1.5 border-2 border-[#4E3B69] dark:border-[#7662AC] bg-[#FFFDFB] dark:bg-[#2A2247] text-xs"
-                        >
-                          {REGIONS.map((r) => (
-                            <option key={r.id} value={r.id}>
-                              {r.name}
-                            </option>
-                          ))}
-                        </select>
-                        <label className="flex items-center gap-1 text-[11px]">
-                          <input
-                            type="checkbox"
-                            checked={randProvince}
-                            onChange={(e) => setRandProvince(e.target.checked)}
-                            className="accent-[#FF8DA8]"
-                          />
-                          <span>สุ่มจังหวัดในภาคนี้</span>
-                        </label>
-                        {!randProvince && (
-                          <select
-                            value={province}
-                            onChange={(e) => setProvince(e.target.value)}
-                            className="w-full px-2.5 py-1.5 border-2 border-[#4E3B69] dark:border-[#7662AC] bg-[#FFFDFB] dark:bg-[#2A2247] text-xs"
-                          >
-                            {selectedRegionObj.provinces.map((p) => (
-                              <option key={p} value={p}>
-                                {p}
-                              </option>
-                            ))}
-                          </select>
-                        )}
-                      </div>
-                    )}
-                  </div>
                 </div>
               </div>
             )}

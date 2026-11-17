@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { STORYLET_CATALOG } from '../data/storylets/catalog';
 import { PLANNER_STORYLETS } from '../data/storylets/plannerStorylets';
+import { TRAIT_GATED_ACTIONS } from '../data/traits';
 import { generateAnnualFocusDigest } from '../engine/digest';
 import { explain } from '../engine/explain';
 import { stepOneTick } from '../engine/pipeline';
@@ -10,8 +11,10 @@ import {
   getYearlyCalendarEvents,
   isActivityAvailableInSlot,
   isSlotLocked,
+  previewPlannerImpact,
   sanitizePlannerWithRelockNotice,
 } from '../engine/planner';
+import { AUTOSAVE_SLOT_ID, MANUAL_SAVE_SLOTS } from '../engine/save';
 import { createInitialGameState, dispatchPlayerAction } from '../engine/state';
 import { isStoryletEligible, validateStorylet } from '../engine/storylet';
 import { applyWeeklyTimeAllocation } from '../engine/timeAlloc';
@@ -492,13 +495,79 @@ function test5_MinorStrictProtection() {
   console.log('PASS [Test 5]: Strict minor (<18) guards across planner activities, storylets, and self-care orders');
 }
 
+function test6_PostReleasePatchAutosaveSkillPreviewAndToasts() {
+  // 1) Auto-Save slot & 4 manual save slots
+  assert.equal(AUTOSAVE_SLOT_ID, 'autosave', 'AUTOSAVE_SLOT_ID must be autosave');
+  assert.equal(MANUAL_SAVE_SLOTS.length, 4, 'Must have 4 manual save slots separate from autosave');
+
+  // 2) apply_overtime removed from TRAIT_GATED_ACTIONS
+  assert.equal(
+    TRAIT_GATED_ACTIONS.some((a) => a.id === 'apply_overtime'),
+    false,
+    'apply_overtime must be removed from TRAIT_GATED_ACTIONS'
+  );
+
+  // 3) Focused skill summary flags missing self_dev slot
+  let worker = createInitialGameState({
+    mode: 'at_age',
+    seed: 32306,
+    atAge: { targetAge: 24, education: 'bachelor', wealthFocus: 'average' },
+  });
+  worker = dispatchPlayerAction(worker, { type: 'APPLY_JOB', jobId: 'office_junior' }).state;
+  worker = dispatchPlayerAction(worker, { type: 'SET_SKILL_FOCUS', focus: ['tech'] }).state;
+  const gridWithoutSelfDev = clonePlannerGrid(worker.planner!.grid);
+  gridWithoutSelfDev.weekday.evening = 'quiet_rest';
+  gridWithoutSelfDev.weekend.morning = 'quiet_rest';
+  gridWithoutSelfDev.weekend.afternoon = 'quiet_rest';
+  gridWithoutSelfDev.weekend.evening = 'family_time';
+  const preview = previewPlannerImpact(gridWithoutSelfDev, worker);
+  assert.equal(preview.focusedSkillsSummary.length, 1, 'Focused skill tech must be summarized');
+  assert.equal(preview.focusedSkillsSummary[0].hasSelfDevSlot, false, 'hasSelfDevSlot must be false when alloc.selfDev === 0');
+  assert.equal(preview.focusedSkillsSummary[0].estimatedWeeklyGain, 0, 'Weekly gain for tech without self_dev slot must be 0');
+
+  // 4) RESOLVE_PROMPT creates Thai activeToast for AddFlag activity unlock and RecordEvidence
+  const triggered = dispatchPlayerAction(worker, {
+    type: 'TRIGGER_STORYLET',
+    storyletId: 'planner_15_gaming_stream_invite',
+  });
+  assert.equal(triggered.accepted, true, 'Must trigger planner_15_gaming_stream_invite');
+  const resolved = dispatchPlayerAction(triggered.state, {
+    type: 'RESOLVE_PROMPT',
+    promptId: triggered.state.pendingPrompt!.id,
+    choiceId: 'start_streaming_channel',
+  });
+  assert.equal(resolved.accepted, true, 'Must resolve streaming unlock choice');
+  assert.ok(resolved.state.activeToast, 'RESOLVE_PROMPT must set activeToast on unlock/evidence');
+  assert.ok(
+    resolved.state.activeToast!.title.includes('ปลดล็อกกิจกรรมใหม่'),
+    'Toast title must announce newly unlocked planner activity'
+  );
+  assert.equal(
+    resolved.state.activeToast!.description.includes('stream_unlocked') ||
+      resolved.state.activeToast!.description.includes('hobby_focus'),
+    false,
+    'Toast description must NEVER leak raw snake_case keys'
+  );
+
+  // 5) Gated action execution produces clear outcome message
+  const gatedRes = dispatchPlayerAction(worker, {
+    type: 'EXECUTE_GATED_ACTION',
+    actionId: 'therapy_reflection',
+  });
+  assert.equal(gatedRes.accepted, true, 'Gated action must execute cleanly');
+  assert.ok(gatedRes.message && gatedRes.message.includes('ความเครียด'), 'Gated action message must include outcome details');
+
+  console.log('PASS [Test 6]: Phase 3.2.3 Post-Release Patch (autosave slots, skill preview flag, gated cleanup, storylet toast)');
+}
+
 function run() {
   test1_CatalogAndPlannerStoryletsValidation();
   test2_AnnualFocusRulesBonusDigestAndT3Protection();
   test3_UnlockableActivitiesAndPoliteRelock();
   test4_Deterministic400DaysAndSelfCarePauseResume();
   test5_MinorStrictProtection();
-  console.log('\nAll 5 Phase 3.2.3 verification tests PASSED!');
+  test6_PostReleasePatchAutosaveSkillPreviewAndToasts();
+  console.log('\nAll 6 Phase 3.2.3 verification tests PASSED!');
 }
 
 run();

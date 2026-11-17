@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { BASE_MS_PER_DAY } from '../../engine/clock';
 import { shouldInterruptWithAttentionBudget } from '../../engine/director';
 import { skipToNextMilestone, stepOneTick } from '../../engine/pipeline';
-import { buildSavePayload, saveToIndexedDB } from '../../engine/save';
+import { AUTOSAVE_SLOT_ID, buildSavePayload, saveAutosave, saveToIndexedDB } from '../../engine/save';
 import { dispatchPlayerAction } from '../../engine/state';
 import type {
   ActionRecord,
@@ -117,6 +117,16 @@ export function MainGameScreen({
     [reduceFx]
   );
 
+  const triggerAutosave = useCallback((targetState?: GameState) => {
+    const target = targetState ?? stateRef.current;
+    if (!target || !target.character.isAlive) return;
+    void saveAutosave(
+      target,
+      lifeGenRef.current,
+      actionLogRef.current
+    ).catch(() => {});
+  }, []);
+
   useEffect(() => {
     if (state.character.ageYears > prevAgeRef.current && state.character.isAlive) {
       const newAge = state.character.ageYears;
@@ -193,6 +203,7 @@ export function MainGameScreen({
       let stepped = false;
 
       let safetyLoop = 0;
+      let hitNewWeek = false;
       while (accumulator >= msPerTick && safetyLoop < 120) {
         if (!current.character.isAlive || current.needsPlayer) {
           accumulator = 0;
@@ -200,10 +211,16 @@ export function MainGameScreen({
           setSpeed(0);
           break;
         }
+        const prevDays = current.date.totalDays;
         current = stepOneTick(current, { allowPrompts: true });
         accumulator -= msPerTick;
         stepped = true;
         safetyLoop++;
+
+        // Auto-save every week (every Monday / dayOfWeek === 1)
+        if (current.date.dayOfWeek === 1 && current.date.totalDays !== prevDays) {
+          hitNewWeek = true;
+        }
 
         if (current.pendingPrompt && current.character.isAlive) {
           const tier = current.pendingPrompt.tier ?? 'T2';
@@ -248,6 +265,9 @@ export function MainGameScreen({
       if (stepped) {
         stateRef.current = current;
         onUpdateState(current);
+        if (hitNewWeek) {
+          triggerAutosave(current);
+        }
       }
 
       if (
@@ -273,13 +293,13 @@ export function MainGameScreen({
       cancelAnimationFrame(rafId);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [speed, state.needsPlayer, state.character.isAlive, onUpdateState]);
+  }, [speed, state.needsPlayer, state.character.isAlive, onUpdateState, triggerAutosave]);
 
   // Monthly Autosave to IndexedDB
   useEffect(() => {
     if (!state.pendingAutosave) return;
     const payload = buildSavePayload(
-      'autosave',
+      AUTOSAVE_SLOT_ID,
       'บันทึกอัตโนมัติ (สิ้นเดือน)',
       state,
       lifeGenRef.current,
@@ -320,6 +340,7 @@ export function MainGameScreen({
   const handleDispatch = (action: PlayerAction) => {
     const prevPrompt = stateRef.current.pendingPrompt;
     const prevAutopilot = stateRef.current.pendingAutopilotSituation;
+    const prevToastId = stateRef.current.activeToast?.id;
     const res = dispatchPlayerAction(stateRef.current, action);
     if (!res.accepted) {
       if (res.message) {
@@ -333,20 +354,31 @@ export function MainGameScreen({
     onUpdateState(res.state);
 
     if (action.type === 'RESOLVE_PROMPT' && res.state.character.isAlive) {
-      const chosen = prevPrompt?.choices.find((c) => c.id === action.choiceId);
-      const latestTimeline = res.state.timeline[res.state.timeline.length - 1];
-      const summary =
-        latestTimeline?.effectsSummary && latestTimeline.effectsSummary.length > 0
-          ? latestTimeline.effectsSummary.join(' · ')
-          : chosen?.hint ?? 'ตัดสินใจเรียบร้อย ชีวิตเดินหน้าต่อแล้ว';
-      showNotice(
-        {
-          kind: 'outcome',
-          title: chosen ? `เลือก: ${chosen.label}` : 'บันทึกการตัดสินใจแล้ว',
-          body: summary,
-        },
-        2700
+      const hasNewFeedbackToast = Boolean(
+        res.state.activeToast && res.state.activeToast.id !== prevToastId
       );
+      if (hasNewFeedbackToast) {
+        if (noticeTimerRef.current !== null) {
+          window.clearTimeout(noticeTimerRef.current);
+          noticeTimerRef.current = null;
+        }
+        setNotice(null);
+      } else {
+        const chosen = prevPrompt?.choices.find((c) => c.id === action.choiceId);
+        const latestTimeline = res.state.timeline[res.state.timeline.length - 1];
+        const summary =
+          latestTimeline?.effectsSummary && latestTimeline.effectsSummary.length > 0
+            ? latestTimeline.effectsSummary.join(' · ')
+            : chosen?.hint ?? 'ตัดสินใจเรียบร้อย ชีวิตเดินหน้าต่อแล้ว';
+        showNotice(
+          {
+            kind: 'outcome',
+            title: chosen ? `เลือก: ${chosen.label}` : 'บันทึกการตัดสินใจแล้ว',
+            body: summary,
+          },
+          2700
+        );
+      }
       if (!res.state.needsPlayer) {
         setSpeed(lastActiveSpeed);
       }
@@ -375,6 +407,15 @@ export function MainGameScreen({
       if (!res.state.needsPlayer) {
         setSpeed(lastActiveSpeed);
       }
+    } else if (action.type === 'EXECUTE_GATED_ACTION' && res.message) {
+      showNotice(
+        {
+          kind: 'outcome',
+          title: 'ทำกิจกรรมพิเศษสำเร็จ',
+          body: res.message,
+        },
+        3200
+      );
     } else if (res.message) {
       showNotice(
         {
@@ -385,7 +426,35 @@ export function MainGameScreen({
         2600
       );
     }
+
+    // Auto-save on prompt resolution or life planner confirmation
+    if (
+      (action.type === 'RESOLVE_PROMPT' ||
+        action.type === 'CONFIRM_LIFE_PLANNER' ||
+        (action as { type: string }).type === 'UPDATE_PLANNER') &&
+      res.state.character.isAlive
+    ) {
+      triggerAutosave(res.state);
+    }
   };
+
+  // Auto-save immediately on tab switch or screen hide on mobile
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        triggerAutosave();
+      }
+    };
+    const handlePageHide = () => {
+      triggerAutosave();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('pagehide', handlePageHide);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('pagehide', handlePageHide);
+    };
+  }, [triggerAutosave]);
 
   const handleSkip = (target: 'month' | 'year' | 'milestone') => {
     setPauseReason('manual');

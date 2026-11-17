@@ -29,11 +29,18 @@ export interface SaveSlotData {
   };
 }
 
-export const SAVE_SLOTS = [
-  { id: 'autosave', label: 'บันทึกอัตโนมัติ (สิ้นเดือน)' },
+export const AUTOSAVE_SLOT_ID = 'autosave';
+
+export const MANUAL_SAVE_SLOTS = [
   { id: 'slot_1', label: 'ช่องบันทึกที่ 1' },
   { id: 'slot_2', label: 'ช่องบันทึกที่ 2' },
   { id: 'slot_3', label: 'ช่องบันทึกที่ 3' },
+  { id: 'slot_4', label: 'ช่องบันทึกที่ 4' },
+] as const;
+
+export const SAVE_SLOTS = [
+  { id: AUTOSAVE_SLOT_ID, label: 'บันทึกอัตโนมัติ (ล่าสุด)' },
+  ...MANUAL_SAVE_SLOTS,
 ] as const;
 
 export function buildSavePayload(
@@ -323,3 +330,23 @@ export async function deleteSaveSlotFromIndexedDB(slotId: string): Promise<void>
     };
   });
 }
+
+export async function saveAutosave(
+  state: GameState,
+  lifeGenRequest: LifeGenRequest,
+  actionLog: ActionRecord[]
+): Promise<void> {
+  const payload = buildSavePayload(
+    AUTOSAVE_SLOT_ID,
+    'บันทึกอัตโนมัติ',
+    state,
+    lifeGenRequest,
+    actionLog
+  );
+  await saveToIndexedDB(payload);
+}
+
+export async function loadAutosave(): Promise<SaveSlotData | null> {
+  return loadFromIndexedDB(AUTOSAVE_SLOT_ID);
+}
+

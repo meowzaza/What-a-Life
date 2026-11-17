@@ -97,7 +97,7 @@ export function SaveLoadModal({
               </h2>
             </div>
             <p className="text-xs text-[#5A3F73] dark:text-[#F4E6F0]">
-              บันทึกอัตโนมัติทุกสิ้นเดือน และเซฟแยกได้อีก 3 ช่อง
+              บันทึกอัตโนมัติล่าสุด และเซฟแยกได้อีก 4 ช่อง
             </p>
           </div>
           <button

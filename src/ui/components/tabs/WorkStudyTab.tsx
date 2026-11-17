@@ -102,7 +102,7 @@ export function WorkStudyTab({ state, onDispatch, onSelectExplain }: WorkStudyTa
           }`}
         >
           <PixelIcon name="sparkle" size={14} />
-          <span>กิจกรรมเฉพาะตัว</span>
+          <span>{UI_TEXT.GATED_ACTIONS.tabLabel}</span>
           <span className="font-num tabular-nums text-[10px] opacity-80">
             ({availableActionCount}/{evaluatedActions.length})
           </span>
@@ -128,10 +128,10 @@ export function WorkStudyTab({ state, onDispatch, onSelectExplain }: WorkStudyTa
               <PixelIcon name="sparkle" size={18} />
               <div className="min-w-0">
                 <h3 className="font-display font-extrabold text-sm sm:text-base text-[#3D2D52] dark:text-[#FFF6FA]">
-                  กิจกรรมเฉพาะตัว (ปลดล็อก/ล็อกตามนิสัยและทักษะ)
+                  {UI_TEXT.GATED_ACTIONS.sectionTitle}
                 </h3>
                 <p className="text-[11px] text-[#5A3F73] dark:text-[#F4E6F0]">
-                  กิจกรรมพิเศษที่กดลงมือทำได้ทันทีเมื่อช่วงวัย นิสัย และทักษะถึงเกณฑ์
+                  {UI_TEXT.GATED_ACTIONS.sectionSubtitle}
                 </p>
               </div>
             </div>

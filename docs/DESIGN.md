@@ -505,6 +505,17 @@ src/
     - ในโค้ดปัจจุบัน `clock.ts` รัน `onYear()` (เพิ่มอายุและฉลองวัยใหม่) ในวันที่ 1 ม.ค. ขณะที่วันเกิดเริ่มต้นในปฏิทินคือ 14 พ.ค. (`onBirthday`) จึงรันการสรุปผล/ต่ออายุเป้าหมายและตรวจสุขภาพประจำปีใน `onYear()` ให้สอดคล้องกับระบบอายุจริงของเกม (และแสดง 14 พ.ค. ในปฏิทินรายปีตามปกติ)
     - ชื่อตัวตน/Trait ในโค้ดจริงใช้ `solitude_lover` (ไม่ใช่ `solitary_hobbyist` ในร่างสเปค)
     - รายการรอ Phase ถัดไป: `internship` รอ Phase 3.4, `raise_child` รอ NPC ลูกใน Phase 4, รายได้สตรีมเมอร์รอ Phase 3.5, และฉาก ยิม/ห้องสมุด/ห้างสรรพสินค้า ใช้ฉากสำรองใน `sceneManifest.json`
+- **Patch เก็บตก Phase 3.2.3**: เสร็จสมบูรณ์ (Auto-Save & Resume + คำแนะนำทักษะในกริด + ปรับปรุงการกระทำพิเศษและ Storylet Toast + ลดโหมดหน้าแรกเหลือ 2 โหมด)
+  - **ระบบเซฟอัตโนมัติและเล่นต่อ (`src/engine/save.ts`, `MainGameScreen.tsx`, `LifeGenScreen.tsx`, `SaveLoadModal.tsx`)**:
+    - แยกช่อง `AUTOSAVE_SLOT_ID = 'autosave'` ออกจากช่องเซฟแมนนวล 4 ช่อง (`slot_1`..`slot_4`) พร้อมฟังก์ชัน `saveAutosave` / `loadAutosave`
+    - บันทึกอัตโนมัติใน 3 จังหวะโดยไม่กระทบเฟรมเรต: (1) ทุกวันจันทร์ในเกม, (2) ทันทีเมื่อตอบเหตุการณ์ (`RESOLVE_PROMPT`) หรือยืนยันตารางแผนชีวิต (`CONFIRM_LIFE_PLANNER`), และ (3) เมื่อสลับแท็บหรือพับหน้าจอบนมือถือ (`visibilitychange === 'hidden'` และ `pagehide`)
+    - เพิ่มปุ่มเด่น `"เล่นต่อจากเซฟอัตโนมัติ (ชื่อตัวละคร • อายุ X ปี)"` ด้านบนสุดของหน้าแรก (`LifeGenScreen.tsx`) และรองรับการโหลดผ่าน `SaveLoadModal`
+  - **การแสดงผลทักษะและการกระทำพิเศษ (`planner.ts`, `LifePlannerPanel.tsx`, `traits.ts`, `WorkStudyTab.tsx`, `state.ts`)**:
+    - เพิ่ม `hasSelfDevSlot` ใน `previewPlannerImpact`: เมื่อตั้งโฟกัสทักษะไว้แต่ไม่มีช่องหมวดพัฒนาตัวเอง (`self_dev`) ในตารางและไม่มีการเติบโตอื่น จะแสดงคำแนะนำชัดเจนให้ใส่กิจกรรมพัฒนาตัวเองอย่างน้อย 1 ช่อง
+    - ลบ `apply_overtime` ออกจาก `TRAIT_GATED_ACTIONS` (ให้จัดการโอทีผ่านช่อง `overtime_work` ในกริดตารางเป็นหลัก), ปรับคำอธิบายใน `WorkStudyTab.tsx` เป็น `"การกระทำพิเศษตามนิสัยและทักษะ"`, และแสดง Toast ผลลัพธ์ทุกครั้งที่กดทำ
+    - เพิ่ม `attachStoryletFeedbackToast` ใน `RESOLVE_PROMPT`: เมื่อเหตุการณ์ปลดล็อกกิจกรรมใหม่ในตาราง (`stream_unlocked`, `competition_unlocked`, `freelance_unlocked`, `has_child`) หรือเพิ่ม `RecordEvidence` ระบบจะสร้าง `ActiveToast` ภาษาไทย (แปลผ่าน `translateEvidenceKey` ไร้คีย์ดิบ) แจ้งผู้เล่นทันที
+  - **หน้าแรกเริ่มชีวิตเหลือ 2 โหมดหลัก (`src/ui/screens/LifeGenScreen.tsx`)**:
+    - ปรับตัวเลือก UI เหลือ `1. สุ่มชีวิตใหม่` (`random`) และ `2. กำหนดชะตาเอง` (`custom`, รองรับอายุ 0–65 ปี) โดยยังคงโหมด `'at_age'` ในชั้น Engine (`lifegen.ts`) ไว้เพื่อความเข้ากันได้กับเซฟและชุดทดสอบเดิม
 
 ---
 

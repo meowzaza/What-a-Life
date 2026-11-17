@@ -240,6 +240,8 @@ export const UI_TEXT = {
       `ชั่วโมงงานรวม (งานประจำ + โอที + งานเสริม) ต้องไม่เกิน ${max} ชม./สัปดาห์ (ปัจจุบัน ${current} ชม.)`,
     totalWorkHoursLabel: (current: number, max: number) =>
       `ชั่วโมงงานรวม ${current}/${max} ชม./สัปดาห์`,
+    noSelfDevSlotHint: (skillLabel: string) =>
+      `ทักษะที่เลือก: ${skillLabel} (+0.0/สัปดาห์ — ต้องใส่กิจกรรมพัฒนาตัวเองในตารางอย่างน้อย 1 ช่อง)`,
     arrowLabels: {
       energy: 'พลังงาน',
       stress: 'ความเครียด',
@@ -311,5 +313,26 @@ export const UI_TEXT = {
     remittanceOff: 'ยังไม่ตั้งส่งรายเดือน',
     remittance5: 'ส่ง 5% ของรายได้',
     remittance15: 'ส่ง 15% ของรายได้',
+  } as const,
+
+  // === 14. Phase 3.2.3 Post-Release Patch ===
+  GATED_ACTIONS: {
+    tabLabel: 'การกระทำพิเศษ',
+    sectionTitle: 'การกระทำพิเศษตามนิสัยและทักษะ',
+    sectionSubtitle: 'ลงมือทำกิจกรรมพิเศษที่ปลดล็อกหรือปิดกั้นตามนิสัยและทักษะของคุณได้ทันที',
+    toastTitle: (label: string) => `ทำกิจกรรมพิเศษ: ${label}`,
+  } as const,
+
+  AUTOSAVE: {
+    resumeEyebrow: 'เล่นต่อจากจุดเดิม',
+    resumeButton: (name: string, ageYears: number) =>
+      `เล่นต่อจากเซฟอัตโนมัติ (${name} • อายุ ${ageYears} ปี)`,
+  } as const,
+
+  STORYLET_TOAST: {
+    unlockTitle: 'ปลดล็อกกิจกรรมใหม่ในตารางชีวิต',
+    unlockPrefix: (labels: string[]) => `ปลดล็อกแล้ว: ${labels.join(', ')}`,
+    evidenceTitle: 'บันทึกพฤติกรรมสะสมแล้ว',
+    evidencePrefix: (labels: string[]) => `สะสมพฤติกรรมด้าน: ${labels.join(', ')}`,
   } as const,
 } as const;

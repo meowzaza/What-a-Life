@@ -149,6 +149,7 @@ export interface PlannerImpactPreview {
     atCap: boolean;
     estimatedWeeklyGain: number;
     unlockHintTh: string;
+    hasSelfDevSlot?: boolean;
   }>;
   scenesToSee: string[];
   warningsTh: string[];
@@ -1905,6 +1906,7 @@ export function previewPlannerImpact(grid: PlannerGrid, state: GameState): Plann
   };
   const training = createInitialSkillTrainingState(state.skillTraining);
   const focusList = training.focus;
+  const hasSelfDevSlot = alloc.selfDev > 0;
   const focusedSkillsSummary = focusList.map((sk) => {
     const d = getSkillGrowthDetails(previewState, sk);
     return {
@@ -1915,6 +1917,7 @@ export function previewPlannerImpact(grid: PlannerGrid, state: GameState): Plann
       atCap: d.atCap,
       estimatedWeeklyGain: d.estimatedWeeklyGain,
       unlockHintTh: d.unlockHintTh,
+      hasSelfDevSlot,
     };
   });
 

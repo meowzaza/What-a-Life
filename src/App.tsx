@@ -104,6 +104,7 @@ export default function App() {
         <LifeGenScreen
           onStartLife={handleStartLife}
           onOpenLoadModal={() => setIsSaveModalOpen(true)}
+          onLoadAutosave={handleLoadFromSlot}
           onOpenFontSettings={() => setIsFontModalOpen(true)}
           isDark={isDark}
           reduceFx={reduceFx}

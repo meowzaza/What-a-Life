@@ -959,6 +959,14 @@ export function LifePlannerPanel({
                     <span className="text-[#BD346B] dark:text-[#FFB8D4] font-semibold">
                       {UI_TEXT.SKILL_TRAINING.capReachedBadge} · {sk.unlockHintTh}
                     </span>
+                  ) : !sk.hasSelfDevSlot && sk.estimatedWeeklyGain < 0.01 ? (
+                    <span className="text-[#BD346B] dark:text-[#FFB8D4] font-semibold">
+                      {UI_TEXT.PLANNER.noSelfDevSlotHint(sk.labelTh)}
+                    </span>
+                  ) : !sk.hasSelfDevSlot ? (
+                    <span className="font-num tabular-nums font-bold text-[#167956] dark:text-[#7EF4C2]">
+                      +{sk.estimatedWeeklyGain.toFixed(2)}/สัปดาห์ (จากกิจกรรมประจำ · เพิ่มช่องพัฒนาตัวเองเพื่อฝึกเต็มที่)
+                    </span>
                   ) : (
                     <span className="font-num tabular-nums font-bold text-[#167956] dark:text-[#7EF4C2]">
                       +{sk.estimatedWeeklyGain.toFixed(2)}/สัปดาห์
