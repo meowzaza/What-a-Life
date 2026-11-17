@@ -1,0 +1,411 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ==================== TA 16 BIT (Thai Pixel Font - New OTF) ==================== */
+@font-face {
+  font-family: 'TA 16 BIT';
+  src: url('/fonts/TA-16-BIT.otf') format('opentype'),
+       url('/fonts/TA-16-BIT.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'TA 16 BIT';
+  src: url('/fonts/TA-16-BIT.otf') format('opentype'),
+       url('/fonts/TA-16-BIT.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'TA 16 BIT';
+  src: url('/fonts/TA-16-BIT.otf') format('opentype'),
+       url('/fonts/TA-16-BIT.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ==================== Pixelpoint (Modern Thai Pixel Font) ==================== */
+@font-face {
+  font-family: 'Pixelpoint';
+  src: url('/fonts/Pixelpoint.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Pixelpoint';
+  src: url('/fonts/Pixelpoint.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Pixelpoint';
+  src: url('/fonts/Pixelpoint.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ==================== RD CHULAJARUEK (Classic Thai Pixel Font) ==================== */
+@font-face {
+  font-family: 'RD CHULAJARUEK';
+  src: url('/fonts/RD-CHULAJARUEK.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'RD CHULAJARUEK';
+  src: url('/fonts/RD-CHULAJARUEK.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'RD CHULAJARUEK';
+  src: url('/fonts/RD-CHULAJARUEK.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@layer base {
+  :root {
+    --bg-page: #FDF4F8;
+    --bg-pattern-a: rgba(255, 214, 232, 0.24);
+    --bg-pattern-b: rgba(203, 219, 255, 0.22);
+    --bg-card: #FFFDFB;
+    --bg-subtle: #FFF2F6;
+    --bg-inset: #FAF0F5;
+    --bg-header-pink: #FFB8D2;
+    --bg-header-periwinkle: #B4C3FF;
+    --bg-header-butter: #FFE58F;
+    --bg-header-mint: #B8F0D2;
+    --ink: #3D2D52;
+    --ink-muted: #76658D;
+    --ink-stroke: #4E3B69;
+    --shadow-color: #C7B4D9;
+    --shadow-hard: #4E3B69;
+    --accent-primary: #FF8DA8;
+    --accent-gold: #FFD86B;
+    --font-body: 'TA 16 BIT', 'Noto Sans Thai', 'Kanit', system-ui, sans-serif;
+    --font-display: 'TA 16 BIT', 'Noto Sans Thai', 'Kanit', sans-serif;
+    --font-num: 'TA 16 BIT', 'Noto Sans Thai', 'Kanit', sans-serif;
+  }
+
+  .dark {
+    --bg-page: #1E1833;
+    --bg-pattern-a: rgba(103, 83, 158, 0.14);
+    --bg-pattern-b: rgba(74, 58, 120, 0.14);
+    --bg-card: #2A2247;
+    --bg-subtle: #352B59;
+    --bg-inset: #221B3B;
+    --bg-header-pink: #8E4A6F;
+    --bg-header-periwinkle: #4F5DA8;
+    --bg-header-butter: #8F7230;
+    --bg-header-mint: #2D6E59;
+    --ink: #FFF6FA;
+    --ink-muted: #CBBFE3;
+    --ink-stroke: #7662AC;
+    --shadow-color: #100B21;
+    --shadow-hard: #100B21;
+    --accent-primary: #FF94B2;
+    --accent-gold: #FFD86B;
+  }
+
+  html {
+    font-family: var(--font-body);
+    font-size: 16px;
+    background-color: var(--bg-page);
+    color: var(--ink);
+  }
+
+  body {
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.55;
+    background-color: var(--bg-page);
+    background-image:
+      linear-gradient(90deg, var(--bg-pattern-a) 12px, transparent 12px),
+      linear-gradient(180deg, var(--bg-pattern-b) 12px, transparent 12px);
+    background-size: 24px 24px;
+    color: var(--ink);
+  }
+
+  h1, h2, h3, h4, .font-display {
+    font-family: var(--font-display);
+  }
+
+  .font-num, .tabular-nums {
+    font-family: var(--font-num);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.pixelated {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+/* Genuine Soft-Pastel Stepped-Pixel Window & Card Frames
+ * Uses internal 4px 9-slice SVG pixel corner geometry + 2px pixel notch clip-path
+ * so overflow-hidden & horizontal scroll containers NEVER clip corners or sides. */
+.game-card,
+.px-window {
+  background-color: var(--bg-card);
+  background-clip: padding-box;
+  border: 4px solid transparent;
+  border-radius: 0;
+  border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' shape-rendering='crispEdges'%3E%3Crect x='2' y='0' width='8' height='2' fill='%234E3B69'/%3E%3Crect x='2' y='10' width='8' height='2' fill='%234E3B69'/%3E%3Crect x='0' y='2' width='2' height='8' fill='%234E3B69'/%3E%3Crect x='10' y='2' width='2' height='8' fill='%234E3B69'/%3E%3Crect x='2' y='2' width='2' height='2' fill='%234E3B69'/%3E%3Crect x='8' y='2' width='2' height='2' fill='%234E3B69'/%3E%3Crect x='2' y='8' width='2' height='2' fill='%234E3B69'/%3E%3Crect x='8' y='8' width='2' height='2' fill='%234E3B69'/%3E%3Crect x='4' y='2' width='4' height='2' fill='%23FFFFFF' fill-opacity='0.82'/%3E%3Crect x='2' y='4' width='2' height='4' fill='%23FFFFFF' fill-opacity='0.6'/%3E%3Crect x='4' y='8' width='4' height='2' fill='%234E3B69' fill-opacity='0.16'/%3E%3Crect x='8' y='4' width='2' height='4' fill='%234E3B69' fill-opacity='0.12'/%3E%3C/svg%3E");
+  border-image-slice: 4;
+  border-image-width: 4px;
+  border-image-outset: 0;
+  border-image-repeat: stretch;
+  clip-path: polygon(
+    0 2px, 2px 2px, 2px 0,
+    calc(100% - 2px) 0, calc(100% - 2px) 2px, 100% 2px,
+    100% calc(100% - 2px), calc(100% - 2px) calc(100% - 2px), calc(100% - 2px) 100%,
+    2px 100%, 2px calc(100% - 2px), 0 calc(100% - 2px)
+  );
+  box-shadow: inset 0 -2px 0 0 rgba(199, 180, 217, 0.25);
+}
+
+.dark .game-card,
+.dark .px-window {
+  border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' shape-rendering='crispEdges'%3E%3Crect x='2' y='0' width='8' height='2' fill='%237662AC'/%3E%3Crect x='2' y='10' width='8' height='2' fill='%237662AC'/%3E%3Crect x='0' y='2' width='2' height='8' fill='%237662AC'/%3E%3Crect x='10' y='2' width='2' height='8' fill='%237662AC'/%3E%3Crect x='2' y='2' width='2' height='2' fill='%237662AC'/%3E%3Crect x='8' y='2' width='2' height='2' fill='%237662AC'/%3E%3Crect x='2' y='8' width='2' height='2' fill='%237662AC'/%3E%3Crect x='8' y='8' width='2' height='2' fill='%237662AC'/%3E%3Crect x='4' y='2' width='4' height='2' fill='%23FFFFFF' fill-opacity='0.18'/%3E%3Crect x='2' y='4' width='2' height='4' fill='%23FFFFFF' fill-opacity='0.12'/%3E%3Crect x='4' y='8' width='4' height='2' fill='%230A0618' fill-opacity='0.48'/%3E%3Crect x='8' y='4' width='2' height='4' fill='%230A0618' fill-opacity='0.35'/%3E%3C/svg%3E");
+  box-shadow: inset 0 -2px 0 0 rgba(10, 6, 24, 0.35);
+}
+
+/* Soft Pastel Striped Window Interior */
+.px-window-striped {
+  background-image: repeating-linear-gradient(
+    90deg,
+    rgba(255, 216, 232, 0.16) 0px,
+    rgba(255, 216, 232, 0.16) 8px,
+    transparent 8px,
+    transparent 16px
+  );
+}
+
+.dark .px-window-striped {
+  background-image: repeating-linear-gradient(
+    90deg,
+    rgba(180, 195, 255, 0.05) 0px,
+    rgba(180, 195, 255, 0.05) 8px,
+    transparent 8px,
+    transparent 16px
+  );
+}
+
+.game-card-sm,
+.px-window-sm {
+  background-color: var(--bg-card);
+  background-clip: padding-box;
+  border: 4px solid transparent;
+  border-radius: 0;
+  border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' shape-rendering='crispEdges'%3E%3Crect x='2' y='0' width='8' height='2' fill='%234E3B69'/%3E%3Crect x='2' y='10' width='8' height='2' fill='%234E3B69'/%3E%3Crect x='0' y='2' width='2' height='8' fill='%234E3B69'/%3E%3Crect x='10' y='2' width='2' height='8' fill='%234E3B69'/%3E%3Crect x='2' y='2' width='2' height='2' fill='%234E3B69'/%3E%3Crect x='8' y='2' width='2' height='2' fill='%234E3B69'/%3E%3Crect x='2' y='8' width='2' height='2' fill='%234E3B69'/%3E%3Crect x='8' y='8' width='2' height='2' fill='%234E3B69'/%3E%3Crect x='4' y='2' width='4' height='2' fill='%23FFFFFF' fill-opacity='0.75'/%3E%3Crect x='2' y='4' width='2' height='4' fill='%23FFFFFF' fill-opacity='0.52'/%3E%3Crect x='4' y='8' width='4' height='2' fill='%234E3B69' fill-opacity='0.14'/%3E%3Crect x='8' y='4' width='2' height='4' fill='%234E3B69' fill-opacity='0.1'/%3E%3C/svg%3E");
+  border-image-slice: 4;
+  border-image-width: 4px;
+  border-image-outset: 0;
+  border-image-repeat: stretch;
+  clip-path: polygon(
+    0 2px, 2px 2px, 2px 0,
+    calc(100% - 2px) 0, calc(100% - 2px) 2px, 100% 2px,
+    100% calc(100% - 2px), calc(100% - 2px) calc(100% - 2px), calc(100% - 2px) 100%,
+    2px 100%, 2px calc(100% - 2px), 0 calc(100% - 2px)
+  );
+}
+
+.dark .game-card-sm,
+.dark .px-window-sm {
+  border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' shape-rendering='crispEdges'%3E%3Crect x='2' y='0' width='8' height='2' fill='%237662AC'/%3E%3Crect x='2' y='10' width='8' height='2' fill='%237662AC'/%3E%3Crect x='0' y='2' width='2' height='8' fill='%237662AC'/%3E%3Crect x='10' y='2' width='2' height='8' fill='%237662AC'/%3E%3Crect x='2' y='2' width='2' height='2' fill='%237662AC'/%3E%3Crect x='8' y='2' width='2' height='2' fill='%237662AC'/%3E%3Crect x='2' y='8' width='2' height='2' fill='%237662AC'/%3E%3Crect x='8' y='8' width='2' height='2' fill='%237662AC'/%3E%3Crect x='4' y='2' width='4' height='2' fill='%23FFFFFF' fill-opacity='0.14'/%3E%3Crect x='2' y='4' width='2' height='4' fill='%23FFFFFF' fill-opacity='0.1'/%3E%3Crect x='4' y='8' width='4' height='2' fill='%230A0618' fill-opacity='0.42'/%3E%3Crect x='8' y='4' width='2' height='4' fill='%230A0618' fill-opacity='0.3'/%3E%3C/svg%3E");
+}
+
+/* Recessed Stepped-Pixel Well / Container */
+.px-inset {
+  background-color: var(--bg-inset);
+  background-clip: padding-box;
+  border: 4px solid transparent;
+  border-radius: 0;
+  border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' shape-rendering='crispEdges'%3E%3Crect x='2' y='0' width='8' height='2' fill='%234E3B69' fill-opacity='0.45'/%3E%3Crect x='2' y='10' width='8' height='2' fill='%234E3B69' fill-opacity='0.45'/%3E%3Crect x='0' y='2' width='2' height='8' fill='%234E3B69' fill-opacity='0.45'/%3E%3Crect x='10' y='2' width='2' height='8' fill='%234E3B69' fill-opacity='0.45'/%3E%3Crect x='2' y='2' width='2' height='2' fill='%234E3B69' fill-opacity='0.45'/%3E%3Crect x='8' y='2' width='2' height='2' fill='%234E3B69' fill-opacity='0.45'/%3E%3Crect x='2' y='8' width='2' height='2' fill='%234E3B69' fill-opacity='0.45'/%3E%3Crect x='8' y='8' width='2' height='2' fill='%234E3B69' fill-opacity='0.45'/%3E%3Crect x='4' y='2' width='4' height='2' fill='%234E3B69' fill-opacity='0.12'/%3E%3Crect x='2' y='4' width='2' height='4' fill='%234E3B69' fill-opacity='0.1'/%3E%3Crect x='4' y='8' width='4' height='2' fill='%23FFFFFF' fill-opacity='0.68'/%3E%3C/svg%3E");
+  border-image-slice: 4;
+  border-image-width: 4px;
+  border-image-outset: 0;
+  border-image-repeat: stretch;
+  clip-path: polygon(
+    0 2px, 2px 2px, 2px 0,
+    calc(100% - 2px) 0, calc(100% - 2px) 2px, 100% 2px,
+    100% calc(100% - 2px), calc(100% - 2px) calc(100% - 2px), calc(100% - 2px) 100%,
+    2px 100%, 2px calc(100% - 2px), 0 calc(100% - 2px)
+  );
+}
+
+.dark .px-inset {
+  border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' shape-rendering='crispEdges'%3E%3Crect x='2' y='0' width='8' height='2' fill='%237662AC' fill-opacity='0.75'/%3E%3Crect x='2' y='10' width='8' height='2' fill='%237662AC' fill-opacity='0.75'/%3E%3Crect x='0' y='2' width='2' height='8' fill='%237662AC' fill-opacity='0.75'/%3E%3Crect x='10' y='2' width='2' height='8' fill='%237662AC' fill-opacity='0.75'/%3E%3Crect x='2' y='2' width='2' height='2' fill='%237662AC' fill-opacity='0.75'/%3E%3Crect x='8' y='2' width='2' height='2' fill='%237662AC' fill-opacity='0.75'/%3E%3Crect x='2' y='8' width='2' height='2' fill='%237662AC' fill-opacity='0.75'/%3E%3Crect x='8' y='8' width='2' height='2' fill='%237662AC' fill-opacity='0.75'/%3E%3Crect x='4' y='2' width='4' height='2' fill='%230A0618' fill-opacity='0.45'/%3E%3Crect x='2' y='4' width='2' height='4' fill='%230A0618' fill-opacity='0.35'/%3E%3Crect x='4' y='8' width='4' height='2' fill='%23FFFFFF' fill-opacity='0.08'/%3E%3C/svg%3E");
+}
+
+/* Crisp Stepped-Pixel Activity Slot / Inventory Box */
+.px-slot {
+  background-clip: padding-box;
+  border: 4px solid transparent;
+  border-radius: 0;
+  border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' shape-rendering='crispEdges'%3E%3Crect x='2' y='0' width='8' height='2' fill='%234E3B69'/%3E%3Crect x='2' y='10' width='8' height='2' fill='%234E3B69'/%3E%3Crect x='0' y='2' width='2' height='8' fill='%234E3B69'/%3E%3Crect x='10' y='2' width='2' height='8' fill='%234E3B69'/%3E%3Crect x='2' y='2' width='2' height='2' fill='%234E3B69'/%3E%3Crect x='8' y='2' width='2' height='2' fill='%234E3B69'/%3E%3Crect x='2' y='8' width='2' height='2' fill='%234E3B69'/%3E%3Crect x='8' y='8' width='2' height='2' fill='%234E3B69'/%3E%3Crect x='4' y='2' width='4' height='2' fill='%23FFFFFF' fill-opacity='0.76'/%3E%3Crect x='2' y='4' width='2' height='4' fill='%23FFFFFF' fill-opacity='0.52'/%3E%3Crect x='4' y='8' width='4' height='2' fill='%234E3B69' fill-opacity='0.14'/%3E%3Crect x='8' y='4' width='2' height='4' fill='%234E3B69' fill-opacity='0.1'/%3E%3C/svg%3E");
+  border-image-slice: 4;
+  border-image-width: 4px;
+  border-image-outset: 0;
+  border-image-repeat: stretch;
+  clip-path: polygon(
+    0 2px, 2px 2px, 2px 0,
+    calc(100% - 2px) 0, calc(100% - 2px) 2px, 100% 2px,
+    100% calc(100% - 2px), calc(100% - 2px) calc(100% - 2px), calc(100% - 2px) 100%,
+    2px 100%, 2px calc(100% - 2px), 0 calc(100% - 2px)
+  );
+}
+
+.dark .px-slot {
+  border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' shape-rendering='crispEdges'%3E%3Crect x='2' y='0' width='8' height='2' fill='%237662AC'/%3E%3Crect x='2' y='10' width='8' height='2' fill='%237662AC'/%3E%3Crect x='0' y='2' width='2' height='8' fill='%237662AC'/%3E%3Crect x='10' y='2' width='2' height='8' fill='%237662AC'/%3E%3Crect x='2' y='2' width='2' height='2' fill='%237662AC'/%3E%3Crect x='8' y='2' width='2' height='2' fill='%237662AC'/%3E%3Crect x='2' y='8' width='2' height='2' fill='%237662AC'/%3E%3Crect x='8' y='8' width='2' height='2' fill='%237662AC'/%3E%3Crect x='4' y='2' width='4' height='2' fill='%23FFFFFF' fill-opacity='0.14'/%3E%3Crect x='2' y='4' width='2' height='4' fill='%23FFFFFF' fill-opacity='0.1'/%3E%3Crect x='4' y='8' width='4' height='2' fill='%230A0618' fill-opacity='0.42'/%3E%3Crect x='8' y='4' width='2' height='4' fill='%230A0618' fill-opacity='0.3'/%3E%3C/svg%3E");
+}
+
+/* Tactile 3D Stepped-Pixel Button */
+.game-btn,
+.px-btn {
+  background-clip: padding-box;
+  border: 4px solid transparent;
+  border-radius: 0;
+  border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' shape-rendering='crispEdges'%3E%3Crect x='2' y='0' width='8' height='2' fill='%234E3B69'/%3E%3Crect x='2' y='10' width='8' height='2' fill='%234E3B69'/%3E%3Crect x='0' y='2' width='2' height='8' fill='%234E3B69'/%3E%3Crect x='10' y='2' width='2' height='8' fill='%234E3B69'/%3E%3Crect x='2' y='2' width='2' height='2' fill='%234E3B69'/%3E%3Crect x='8' y='2' width='2' height='2' fill='%234E3B69'/%3E%3Crect x='2' y='8' width='2' height='2' fill='%234E3B69'/%3E%3Crect x='8' y='8' width='2' height='2' fill='%234E3B69'/%3E%3Crect x='4' y='2' width='4' height='2' fill='%23FFFFFF' fill-opacity='0.82'/%3E%3Crect x='2' y='4' width='2' height='4' fill='%23FFFFFF' fill-opacity='0.58'/%3E%3Crect x='4' y='8' width='4' height='2' fill='%234E3B69' fill-opacity='0.22'/%3E%3Crect x='8' y='4' width='2' height='4' fill='%234E3B69' fill-opacity='0.14'/%3E%3C/svg%3E");
+  border-image-slice: 4;
+  border-image-width: 4px;
+  border-image-outset: 0;
+  border-image-repeat: stretch;
+  clip-path: polygon(
+    0 2px, 2px 2px, 2px 0,
+    calc(100% - 2px) 0, calc(100% - 2px) 2px, 100% 2px,
+    100% calc(100% - 2px), calc(100% - 2px) calc(100% - 2px), calc(100% - 2px) 100%,
+    2px 100%, 2px calc(100% - 2px), 0 calc(100% - 2px)
+  );
+  box-shadow: inset 0 -2px 0 0 rgba(78, 59, 105, 0.14);
+  transition: transform 80ms steps(2), filter 120ms ease;
+  min-height: 44px;
+}
+
+.dark .game-btn,
+.dark .px-btn {
+  border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' shape-rendering='crispEdges'%3E%3Crect x='2' y='0' width='8' height='2' fill='%237662AC'/%3E%3Crect x='2' y='10' width='8' height='2' fill='%237662AC'/%3E%3Crect x='0' y='2' width='2' height='8' fill='%237662AC'/%3E%3Crect x='10' y='2' width='2' height='8' fill='%237662AC'/%3E%3Crect x='2' y='2' width='2' height='2' fill='%237662AC'/%3E%3Crect x='8' y='2' width='2' height='2' fill='%237662AC'/%3E%3Crect x='2' y='8' width='2' height='2' fill='%237662AC'/%3E%3Crect x='8' y='8' width='2' height='2' fill='%237662AC'/%3E%3Crect x='4' y='2' width='4' height='2' fill='%23FFFFFF' fill-opacity='0.18'/%3E%3Crect x='2' y='4' width='2' height='4' fill='%23FFFFFF' fill-opacity='0.12'/%3E%3Crect x='4' y='8' width='4' height='2' fill='%230A0618' fill-opacity='0.48'/%3E%3Crect x='8' y='4' width='2' height='4' fill='%230A0618' fill-opacity='0.35'/%3E%3C/svg%3E");
+  box-shadow: inset 0 -2px 0 0 rgba(10, 6, 24, 0.35);
+}
+
+.game-btn:hover:not(:disabled),
+.px-btn:hover:not(:disabled) {
+  filter: brightness(1.03);
+}
+
+.game-btn:active:not(:disabled),
+.px-btn:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: inset 0 2px 0 0 rgba(78, 59, 105, 0.16);
+}
+
+.dark .game-btn:active:not(:disabled),
+.dark .px-btn:active:not(:disabled) {
+  box-shadow: inset 0 2px 0 0 rgba(10, 6, 24, 0.42);
+}
+
+/* Segmented Stepped-Pixel Progress Bar */
+.px-progress-track {
+  border: 2px solid var(--ink-stroke);
+  border-radius: 0;
+  overflow: hidden;
+  box-shadow: inset 0 2px 0 0 rgba(78, 59, 105, 0.1);
+}
+
+.px-progress-fill {
+  position: relative;
+  transition: width 260ms steps(12, end);
+}
+
+.px-progress-fill::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  right: 2px;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.58);
+}
+
+@keyframes shakeDrop {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px) rotate(-1deg); }
+  40% { transform: translateX(4px) rotate(1deg); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(3px); }
+}
+
+.animate-shake-drop {
+  animation: shakeDrop 0.42s ease-in-out;
+}
+
+@keyframes gentleBob {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-3px); }
+}
+
+.animate-gentle-bob {
+  animation: gentleBob 2.4s steps(4, end) infinite;
+}
+
+@keyframes pixelTwinkle {
+  0%, 100% { opacity: 0.45; transform: scale(0.92); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+
+.animate-pixel-twinkle {
+  animation: pixelTwinkle 2.2s steps(3, end) infinite;
+}
+
+@keyframes pixelWingFlap {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-2px) rotate(-4deg); }
+}
+
+.animate-pixel-flap {
+  animation: pixelWingFlap 1.8s steps(3, end) infinite;
+}
+
+@keyframes cloudDrift {
+  0% { transform: translateX(-6px); }
+  50% { transform: translateX(8px); }
+  100% { transform: translateX(-6px); }
+}
+
+.animate-cloud-drift {
+  animation: cloudDrift 10s steps(16, end) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-gentle-bob,
+  .animate-cloud-drift,
+  .animate-shake-drop,
+  .animate-pixel-twinkle,
+  .animate-pixel-flap {
+    animation: none !important;
+  }
+}
+
+[data-reduce-fx="true"] .animate-gentle-bob,
+[data-reduce-fx="true"] .animate-cloud-drift,
+[data-reduce-fx="true"] .animate-shake-drop,
+[data-reduce-fx="true"] .animate-pixel-twinkle,
+[data-reduce-fx="true"] .animate-pixel-flap {
+  animation: none !important;
+}

@@ -1,0 +1,8 @@
+{
+  "name": "ชีวิตจริงยิ่งกว่านิยาย",
+  "description": "เกมจำลองชีวิตสไตล์ไทยสุดเข้มข้น ดำเนินเรื่องด้วยตรรกะแซนด์บ็อกซ์ อิสระทุกการตัดสินใจในโลกที่ยิ่งกว่าละครหลังข่าว",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

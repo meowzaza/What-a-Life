@@ -1,0 +1,876 @@
+{
+ "meta": {
+  "version": 1,
+  "style": "pixel-art side-view, Thai setting, 688x384 (~16:9), day/night pair per scene",
+  "coordinate": "full-bleed background; characters stand on the sidewalk/ground line near the bottom ~10-15% of the image (tune per scene in game)",
+  "root": "assets/",
+  "categories": {
+   "home": "ที่อยู่อาศัย 7 แบบ (02_housing_system)",
+   "school": "โรงเรียน",
+   "education": "มหาวิทยาลัย",
+   "work": "ที่ทำงาน",
+   "commerce": "ร้าน/ตลาด/คาเฟ่",
+   "street": "ย่านถนน",
+   "public": "สถานที่สาธารณะ",
+   "nightlife": "กลางคืนเท่านั้น"
+  },
+  "daypartRule": {
+   "morning": "day",
+   "afternoon": "day",
+   "evening": "night (ไฟเริ่มติด) ถ้าฉากไม่มีภาพ night ใช้ day",
+   "night": "night",
+   "resolver": "sceneImage(sceneId, daypart) = files[daypartImage[daypart]] ?? files.day ?? files.night",
+   "gate": "isSceneOpen(sceneId, daypart, age, settings): ต้อง daypart อยู่ใน availability.dayparts ถ้า false ห้ามแสดงฉาก/ห้ามมีปุ่มไป (ดู 03_jobs_nightlife_daypart.md ข้อ 3)",
+   "homeNote": "ฉากบ้านเปิดทุก daypart (เป็นที่พักอาศัย) ไม่ถูกจำกัดด้วยเวลาเปิดร้าน"
+  },
+  "flags": {
+   "brand": "มีโลโก้ที่คล้ายแบรนด์จริง (7-Eleven) ควรแก้/ตัดก่อนปล่อยจริง",
+   "text_glitch": "มีป้ายตัวอักษรเพี้ยนในรูป (ป้ายรองเล็ก ๆ ที่ไม่ใช่ป้ายหลัก) พิจารณาแก้หรือบังด้วย UI",
+   "night_only": "ฉากนี้มีเฉพาะภาพกลางคืน (ไม่มีไฟล์ day) เรียกได้เฉพาะ evening/night"
+  },
+  "idNote": "ID ฉากบ้านและฉากที่อยู่ใน 02/03 ตรงตามเอกสาร ส่วน school_public/school_temple/school_international และ university ตั้งชื่อตามที่เดา (ไม่มี 01_scene_catalog_v2.md) ถ้าแคตตาล็อกใช้ชื่ออื่นให้ rename โฟลเดอร์ + id ใน manifest",
+  "paths": "files เป็น path ใต้ public/assets/ เช่น public/assets/scenes/cafe/day.png",
+  "counts": {
+   "scenes": 21,
+   "images": 40
+  }
+ },
+ "scenes": [
+  {
+   "id": "home_tenement",
+   "nameTh": "ห้องเช่า/แฟลต",
+   "nameEn": "Tenement flat",
+   "category": "home",
+   "w": 688,
+   "h": 384,
+   "files": {
+    "day": "scenes/home_tenement/day.png",
+    "night": "scenes/home_tenement/night.png"
+   },
+   "daypartImage": {
+    "morning": "day",
+    "afternoon": "day",
+    "evening": "night",
+    "night": "night"
+   },
+   "availability": {
+    "open": null,
+    "close": null,
+    "dayparts": [
+     "morning",
+     "afternoon",
+     "evening",
+     "night"
+    ],
+    "alwaysOpen": true
+   },
+   "housing": {
+    "tenures": [
+     "family",
+     "rent",
+     "own_cash",
+     "mortgage",
+     "rent_to_own"
+    ],
+    "note": "อาคารเก่าธนาคารมักปฏิเสธกู้"
+   },
+   "tags": [
+    "urban",
+    "cheap",
+    "cables",
+    "street_vendors"
+   ],
+   "flags": []
+  },
+  {
+   "id": "home_rural_stilt",
+   "nameTh": "บ้านไม้ชนบท",
+   "nameEn": "Rural stilt house",
+   "category": "home",
+   "w": 688,
+   "h": 384,
+   "files": {
+    "day": "scenes/home_rural_stilt/day.png",
+    "night": "scenes/home_rural_stilt/night.png"
+   },
+   "daypartImage": {
+    "morning": "day",
+    "afternoon": "day",
+    "evening": "night",
+    "night": "night"
+   },
+   "availability": {
+    "open": null,
+    "close": null,
+    "dayparts": [
+     "morning",
+     "afternoon",
+     "evening",
+     "night"
+    ],
+    "alwaysOpen": true
+   },
+   "housing": {
+    "tenures": [
+     "family",
+     "rent",
+     "own_cash",
+     "mortgage",
+     "inherited"
+    ],
+    "regions": [
+     "rural"
+    ]
+   },
+   "tags": [
+    "rural",
+    "wood",
+    "water_jar"
+   ],
+   "flags": []
+  },
+  {
+   "id": "home_shophouse",
+   "nameTh": "บ้านครึ่งไม้พร้อมร้าน",
+   "nameEn": "Half-timber house with shop",
+   "category": "home",
+   "w": 688,
+   "h": 384,
+   "files": {
+    "day": "scenes/home_shophouse/day.png",
+    "night": "scenes/home_shophouse/night.png"
+   },
+   "daypartImage": {
+    "morning": "day",
+    "afternoon": "day",
+    "evening": "night",
+    "night": "night"
+   },
+   "availability": {
+    "open": null,
+    "close": null,
+    "dayparts": [
+     "morning",
+     "afternoon",
+     "evening",
+     "night"
+    ],
+    "alwaysOpen": true
+   },
+   "housing": {
+    "tenures": [
+     "family",
+     "rent",
+     "own_cash",
+     "mortgage",
+     "rent_to_own",
+     "inherited"
+    ]
+   },
+   "tags": [
+    "urban",
+    "shop",
+    "spirit_house"
+   ],
+   "flags": [
+    "text_glitch"
+   ]
+  },
+  {
+   "id": "home_condo_mid",
+   "nameTh": "คอนโดกลางเมือง",
+   "nameEn": "Mid-city condo",
+   "category": "home",
+   "w": 688,
+   "h": 384,
+   "files": {
+    "day": "scenes/home_condo_mid/day.png",
+    "night": "scenes/home_condo_mid/night.png"
+   },
+   "daypartImage": {
+    "morning": "day",
+    "afternoon": "day",
+    "evening": "night",
+    "night": "night"
+   },
+   "availability": {
+    "open": null,
+    "close": null,
+    "dayparts": [
+     "morning",
+     "afternoon",
+     "evening",
+     "night"
+    ],
+    "alwaysOpen": true
+   },
+   "housing": {
+    "tenures": [
+     "rent",
+     "own_cash",
+     "mortgage",
+     "developer_installment"
+    ]
+   },
+   "tags": [
+    "urban",
+    "atm",
+    "bus_stop"
+   ],
+   "flags": []
+  },
+  {
+   "id": "home_thai_house",
+   "nameTh": "บ้านไม้ไทยในรั้ว",
+   "nameEn": "Thai timber house in compound",
+   "category": "home",
+   "w": 688,
+   "h": 384,
+   "files": {
+    "day": "scenes/home_thai_house/day.png",
+    "night": "scenes/home_thai_house/night.png"
+   },
+   "daypartImage": {
+    "morning": "day",
+    "afternoon": "day",
+    "evening": "night",
+    "night": "night"
+   },
+   "availability": {
+    "open": null,
+    "close": null,
+    "dayparts": [
+     "morning",
+     "afternoon",
+     "evening",
+     "night"
+    ],
+    "alwaysOpen": true
+   },
+   "housing": {
+    "tenures": [
+     "family",
+     "rent",
+     "own_cash",
+     "mortgage",
+     "inherited"
+    ]
+   },
+   "tags": [
+    "wood",
+    "garden",
+    "cats",
+    "spirit_house"
+   ],
+   "flags": []
+  },
+  {
+   "id": "home_condo_premium",
+   "nameTh": "คอนโดมีฟิตเนส",
+   "nameEn": "Premium condo with fitness",
+   "category": "home",
+   "w": 688,
+   "h": 384,
+   "files": {
+    "day": "scenes/home_condo_premium/day.png",
+    "night": "scenes/home_condo_premium/night.png"
+   },
+   "daypartImage": {
+    "morning": "day",
+    "afternoon": "day",
+    "evening": "night",
+    "night": "night"
+   },
+   "availability": {
+    "open": null,
+    "close": null,
+    "dayparts": [
+     "morning",
+     "afternoon",
+     "evening",
+     "night"
+    ],
+    "alwaysOpen": true
+   },
+   "housing": {
+    "tenures": [
+     "rent",
+     "own_cash",
+     "mortgage",
+     "developer_installment"
+    ],
+    "regions": [
+     "bangkok",
+     "suburb",
+     "major_city"
+    ]
+   },
+   "tags": [
+    "urban",
+    "gym",
+    "parking"
+   ],
+   "flags": []
+  },
+  {
+   "id": "home_mansion",
+   "nameTh": "บ้านหรู",
+   "nameEn": "Mansion",
+   "category": "home",
+   "w": 688,
+   "h": 384,
+   "files": {
+    "day": "scenes/home_mansion/day.png",
+    "night": "scenes/home_mansion/night.png"
+   },
+   "daypartImage": {
+    "morning": "day",
+    "afternoon": "day",
+    "evening": "night",
+    "night": "night"
+   },
+   "availability": {
+    "open": null,
+    "close": null,
+    "dayparts": [
+     "morning",
+     "afternoon",
+     "evening",
+     "night"
+    ],
+    "alwaysOpen": true
+   },
+   "housing": {
+    "tenures": [
+     "family",
+     "rent",
+     "own_cash",
+     "mortgage",
+     "inherited"
+    ],
+    "regions": [
+     "bangkok",
+     "suburb",
+     "major_city"
+    ],
+    "note": "เช่าหายาก"
+   },
+   "tags": [
+    "luxury",
+    "gate",
+    "garden",
+    "spirit_house"
+   ],
+   "flags": []
+  },
+  {
+   "id": "school_public",
+   "nameTh": "โรงเรียนรัฐ/ทั่วไป",
+   "nameEn": "Public school",
+   "category": "school",
+   "w": 688,
+   "h": 384,
+   "files": {
+    "day": "scenes/school_public/day.png",
+    "night": "scenes/school_public/night.png"
+   },
+   "daypartImage": {
+    "morning": "day",
+    "afternoon": "day",
+    "evening": "night",
+    "night": "night"
+   },
+   "availability": {
+    "open": "07:00",
+    "close": "17:00",
+    "dayparts": [
+     "morning",
+     "afternoon"
+    ],
+    "alwaysOpen": false,
+    "nightMeaning": "กิจกรรมพิเศษ/ค่าย"
+   },
+   "tags": [
+    "school",
+    "street_vendors",
+    "tuktuk"
+   ],
+   "flags": []
+  },
+  {
+   "id": "school_temple",
+   "nameTh": "โรงเรียนวัด",
+   "nameEn": "Temple school",
+   "category": "school",
+   "w": 688,
+   "h": 384,
+   "files": {
+    "day": "scenes/school_temple/day.png",
+    "night": "scenes/school_temple/night.png"
+   },
+   "daypartImage": {
+    "morning": "day",
+    "afternoon": "day",
+    "evening": "night",
+    "night": "night"
+   },
+   "availability": {
+    "open": "07:00",
+    "close": "17:00",
+    "dayparts": [
+     "morning",
+     "afternoon"
+    ],
+    "alwaysOpen": false,
+    "nightMeaning": "กิจกรรมพิเศษ/ค่าย"
+   },
+   "tags": [
+    "school",
+    "thai_roof",
+    "flag"
+   ],
+   "flags": []
+  },
+  {
+   "id": "school_international",
+   "nameTh": "โรงเรียนอินเตอร์",
+   "nameEn": "International school",
+   "category": "school",
+   "w": 688,
+   "h": 384,
+   "files": {
+    "day": "scenes/school_international/day.png",
+    "night": "scenes/school_international/night.png"
+   },
+   "daypartImage": {
+    "morning": "day",
+    "afternoon": "day",
+    "evening": "night",
+    "night": "night"
+   },
+   "availability": {
+    "open": "07:00",
+    "close": "17:00",
+    "dayparts": [
+     "morning",
+     "afternoon"
+    ],
+    "alwaysOpen": false,
+    "nightMeaning": "กิจกรรมพิเศษ/ค่าย"
+   },
+   "tags": [
+    "school",
+    "school_bus",
+    "flag",
+    "sports_field"
+   ],
+   "flags": []
+  },
+  {
+   "id": "university",
+   "nameTh": "มหาวิทยาลัย",
+   "nameEn": "University",
+   "category": "education",
+   "w": 688,
+   "h": 384,
+   "files": {
+    "day": "scenes/university/day.png",
+    "night": "scenes/university/night.png"
+   },
+   "daypartImage": {
+    "morning": "day",
+    "afternoon": "day",
+    "evening": "night",
+    "night": "night"
+   },
+   "availability": {
+    "open": "07:00",
+    "close": "22:00",
+    "dayparts": [
+     "morning",
+     "afternoon",
+     "evening",
+     "night"
+    ],
+    "alwaysOpen": false,
+    "nightMeaning": "ห้องสมุดดึก"
+   },
+   "tags": [
+    "campus",
+    "tuktuk"
+   ],
+   "flags": []
+  },
+  {
+   "id": "work_corporate",
+   "nameTh": "บริษัทใหญ่",
+   "nameEn": "Corporate HQ",
+   "category": "work",
+   "w": 688,
+   "h": 384,
+   "files": {
+    "day": "scenes/work_corporate/day.png",
+    "night": "scenes/work_corporate/night.png"
+   },
+   "daypartImage": {
+    "morning": "day",
+    "afternoon": "day",
+    "evening": "night",
+    "night": "night"
+   },
+   "availability": {
+    "open": "08:00",
+    "close": "18:00",
+    "dayparts": [
+     "morning",
+     "afternoon"
+    ],
+    "alwaysOpen": false,
+    "overtimeDayparts": [
+     "evening",
+     "night"
+    ]
+   },
+   "tags": [
+    "office",
+    "glass_tower",
+    "fictional_brand:SIAM CORP"
+   ],
+   "flags": []
+  },
+  {
+   "id": "work_warehouse",
+   "nameTh": "โกดัง",
+   "nameEn": "Warehouse",
+   "category": "work",
+   "w": 688,
+   "h": 384,
+   "files": {
+    "day": "scenes/work_warehouse/day.png",
+    "night": "scenes/work_warehouse/night.png"
+   },
+   "daypartImage": {
+    "morning": "day",
+    "afternoon": "day",
+    "evening": "night",
+    "night": "night"
+   },
+   "availability": {
+    "open": "00:00",
+    "close": "24:00",
+    "dayparts": [
+     "morning",
+     "afternoon",
+     "evening",
+     "night"
+    ],
+    "alwaysOpen": true,
+    "shiftBased": true,
+    "greyJobsUseNight": true
+   },
+   "tags": [
+    "industrial",
+    "forklift"
+   ],
+   "flags": [
+    "text_glitch"
+   ]
+  },
+  {
+   "id": "shop_minimart",
+   "nameTh": "ร้านสะดวกซื้อ/มินิมาร์ท",
+   "nameEn": "Minimart",
+   "category": "commerce",
+   "w": 688,
+   "h": 384,
+   "files": {
+    "day": "scenes/shop_minimart/day.png",
+    "night": "scenes/shop_minimart/night.png"
+   },
+   "daypartImage": {
+    "morning": "day",
+    "afternoon": "day",
+    "evening": "night",
+    "night": "night"
+   },
+   "availability": {
+    "open": "00:00",
+    "close": "24:00",
+    "dayparts": [
+     "morning",
+     "afternoon",
+     "evening",
+     "night"
+    ],
+    "alwaysOpen": true
+   },
+   "tags": [
+    "24h",
+    "atm",
+    "freezer"
+   ],
+   "flags": [
+    "text_glitch"
+   ]
+  },
+  {
+   "id": "restaurant_tamsang",
+   "nameTh": "ร้านอาหารตามสั่ง",
+   "nameEn": "Made-to-order restaurant",
+   "category": "commerce",
+   "w": 688,
+   "h": 384,
+   "files": {
+    "day": "scenes/restaurant_tamsang/day.png",
+    "night": "scenes/restaurant_tamsang/night.png"
+   },
+   "daypartImage": {
+    "morning": "day",
+    "afternoon": "day",
+    "evening": "night",
+    "night": "night"
+   },
+   "availability": {
+    "open": "06:00",
+    "close": "22:00",
+    "dayparts": [
+     "morning",
+     "afternoon",
+     "evening"
+    ],
+    "alwaysOpen": false
+   },
+   "tags": [
+    "food",
+    "shophouse_row",
+    "lanterns"
+   ],
+   "flags": [
+    "text_glitch"
+   ]
+  },
+  {
+   "id": "cafe",
+   "nameTh": "คาเฟ่",
+   "nameEn": "Cafe",
+   "category": "commerce",
+   "w": 688,
+   "h": 384,
+   "files": {
+    "day": "scenes/cafe/day.png",
+    "night": "scenes/cafe/night.png"
+   },
+   "daypartImage": {
+    "morning": "day",
+    "afternoon": "day",
+    "evening": "night",
+    "night": "night"
+   },
+   "availability": {
+    "open": "07:00",
+    "close": "21:00",
+    "dayparts": [
+     "morning",
+     "afternoon",
+     "evening"
+    ],
+    "alwaysOpen": false,
+    "note": "ส่วนมากปิด 21:00 ภาพ night ใช้เมื่อเปิดดึก/ evening"
+   },
+   "tags": [
+    "cafe",
+    "third_place",
+    "bench"
+   ],
+   "flags": [
+    "text_glitch"
+   ]
+  },
+  {
+   "id": "market_fresh",
+   "nameTh": "ตลาดสดชุมชน",
+   "nameEn": "Fresh market",
+   "category": "commerce",
+   "w": 688,
+   "h": 384,
+   "files": {
+    "day": "scenes/market_fresh/day.png",
+    "night": "scenes/market_fresh/night.png"
+   },
+   "daypartImage": {
+    "morning": "day",
+    "afternoon": "day",
+    "evening": "night",
+    "night": "night"
+   },
+   "availability": {
+    "open": "04:00",
+    "close": "21:00",
+    "dayparts": [
+     "morning",
+     "afternoon",
+     "evening"
+    ],
+    "alwaysOpen": false
+   },
+   "tags": [
+    "market",
+    "vendors",
+    "tuktuk"
+   ],
+   "flags": []
+  },
+  {
+   "id": "street_shops",
+   "nameTh": "ถนนร้านค้า",
+   "nameEn": "Shopping street",
+   "category": "street",
+   "w": 688,
+   "h": 384,
+   "files": {
+    "day": "scenes/street_shops/day.png",
+    "night": "scenes/street_shops/night.png"
+   },
+   "daypartImage": {
+    "morning": "day",
+    "afternoon": "day",
+    "evening": "night",
+    "night": "night"
+   },
+   "availability": {
+    "open": "00:00",
+    "close": "24:00",
+    "dayparts": [
+     "morning",
+     "afternoon",
+     "evening",
+     "night"
+    ],
+    "alwaysOpen": true,
+    "shopsOpen": [
+     "07:00",
+     "22:00"
+    ],
+    "note": "ถนนเดินได้ 24 ชม. ร้านปิดตอนดึก"
+   },
+   "tags": [
+    "street",
+    "cables",
+    "pickup_truck"
+   ],
+   "flags": [
+    "brand",
+    "text_glitch"
+   ]
+  },
+  {
+   "id": "hospital",
+   "nameTh": "โรงพยาบาล",
+   "nameEn": "Hospital",
+   "category": "public",
+   "w": 688,
+   "h": 384,
+   "files": {
+    "day": "scenes/hospital/day.png",
+    "night": "scenes/hospital/night.png"
+   },
+   "daypartImage": {
+    "morning": "day",
+    "afternoon": "day",
+    "evening": "night",
+    "night": "night"
+   },
+   "availability": {
+    "open": "00:00",
+    "close": "24:00",
+    "dayparts": [
+     "morning",
+     "afternoon",
+     "evening",
+     "night"
+    ],
+    "alwaysOpen": true,
+    "note": "ฉุกเฉิน 24 ชม."
+   },
+   "tags": [
+    "emergency",
+    "ambulance"
+   ],
+   "flags": []
+  },
+  {
+   "id": "street_food_night",
+   "nameTh": "ซอยอาหารกลางคืน",
+   "nameEn": "Night food alley",
+   "category": "nightlife",
+   "w": 688,
+   "h": 384,
+   "files": {
+    "night": "scenes/street_food_night/night.png"
+   },
+   "daypartImage": {
+    "morning": "night",
+    "afternoon": "night",
+    "evening": "night",
+    "night": "night"
+   },
+   "availability": {
+    "open": "18:00",
+    "close": "03:00",
+    "dayparts": [
+     "evening",
+     "night"
+    ],
+    "alwaysOpen": false,
+    "nightOnly": true,
+    "hardGate": "ไม่ถูกเรียกเลย ไม่มีปุ่มให้ไป นอก evening/night"
+   },
+   "tags": [
+    "street_food",
+    "string_lights"
+   ],
+   "flags": [
+    "night_only"
+   ]
+  },
+  {
+   "id": "nightlife_pub",
+   "nameTh": "ผับ",
+   "nameEn": "Pub",
+   "category": "nightlife",
+   "w": 688,
+   "h": 384,
+   "files": {
+    "night": "scenes/nightlife_pub/night.png"
+   },
+   "daypartImage": {
+    "morning": "night",
+    "afternoon": "night",
+    "evening": "night",
+    "night": "night"
+   },
+   "availability": {
+    "open": "18:00",
+    "close": "02:00",
+    "dayparts": [
+     "evening",
+     "night"
+    ],
+    "alwaysOpen": false,
+    "nightOnly": true,
+    "minAgeVisit": 20,
+    "minAgeVisitSettingMin": 18,
+    "minAgeWork": 18,
+    "hardGate": "ผู้เยาว์ไม่มีปุ่มและไม่ถูกเรียก (ล็อกใน Engine)"
+   },
+   "tags": [
+    "neon",
+    "pub"
+   ],
+   "flags": [
+    "night_only",
+    "text_glitch"
+   ]
+  }
+ ]
+}
