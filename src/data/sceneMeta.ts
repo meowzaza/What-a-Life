@@ -43,7 +43,7 @@ const DEFAULT_STAND_ZONE: StandZone = {
 const DEFAULT_CHARACTER_SCALE = 0.38;
 
 /**
- * Metadata table per 01_scene_catalog_v2.md Section 10.
+ * Metadata table per 01_scene_catalog.md Section 10.
  * Separated cleanly from sceneManifest.json without modifying asset manifests.
  */
 export const SCENE_META_CATALOG: SceneMetaEntry[] = [
