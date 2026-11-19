@@ -22,7 +22,7 @@ import type { GameState } from '../engine/types';
 
 function test1_CatalogAndPlannerStoryletsValidation() {
   assert.equal(PLANNER_STORYLETS.length, 24, 'PLANNER_STORYLETS must contain exactly 24 storylets');
-  assert.equal(STORYLET_CATALOG.length, 69, 'STORYLET_CATALOG must total 69 (45 + 24)');
+  assert.equal(STORYLET_CATALOG.length, 123, 'STORYLET_CATALOG must total 123 (72 + 51 Phase 3.3.1-FIX)');
 
   const ids = new Set<string>();
   for (const s of STORYLET_CATALOG) {
@@ -51,7 +51,7 @@ function test1_CatalogAndPlannerStoryletsValidation() {
   assert.ok(s24, 'Storylet #24 planner_24_annual_focus_summary must exist');
   assert.equal(s24!.category, 'system', 'Storylet #24 must use category "system"');
 
-  console.log('PASS [Test 1]: 69 storylets validated (45 + 24 planner storylets, #9/#15/#24 verified)');
+  console.log('PASS [Test 1]: 123 storylets validated (45 + 24 planner + 3 Phase 3.3.1 + 51 Age/Edu, #9/#15/#24 verified)');
 }
 
 function test2_AnnualFocusRulesBonusDigestAndT3Protection() {
@@ -392,18 +392,30 @@ function test4_Deterministic400DaysAndSelfCarePauseResume() {
   );
   assert.ok(recoveredState.economy.cash < cashBeforeResume, 'Auto-resumed grooming must deduct fee');
 
-  // Verify year roll with private_3500 checkup triggers +~3 physical
+  // Verify year roll with private_3500 checkup triggers +4.7 endurance/strength (~+3.0 physical) vs off baseline
+  const offState = dispatchPlayerAction(checkupTest, {
+    type: 'UPDATE_STANDING_ORDERS',
+    orders: {
+      ...checkupTest.standingOrders!,
+      selfCare: {
+        ...checkupTest.standingOrders!.selfCare!,
+        healthCheckupPackage: 'off',
+      },
+    },
+  }).state;
+  const bdayOff = stepOneTick(
+    { ...offState, date: { ...offState.date, month: 12, day: 31 }, economy: { ...offState.economy, cash: 80000 } },
+    { allowPrompts: false, recordLogs: false }
+  );
   let bdayPre: GameState = {
     ...checkupTest,
     date: { ...checkupTest.date, month: 12, day: 31 },
     economy: { ...checkupTest.economy, cash: 80000 },
   };
-  const endurBefore = bdayPre.character.rawStats.endurance;
-  const strBefore = bdayPre.character.rawStats.strength;
   bdayPre = stepOneTick(bdayPre, { allowPrompts: false, recordLogs: true });
   assert.ok(
-    bdayPre.character.rawStats.endurance - endurBefore >= 4.0 &&
-      bdayPre.character.rawStats.strength - strBefore >= 4.0,
+    bdayPre.character.rawStats.endurance - bdayOff.character.rawStats.endurance >= 4.0 &&
+      bdayPre.character.rawStats.strength - bdayOff.character.rawStats.strength >= 4.0,
     'private_3500 annual checkup must add endurance & strength (+~3.0 physical)'
   );
 

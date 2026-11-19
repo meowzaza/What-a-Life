@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test": "tsx src/tests/runTests.ts",
+    "test": "tsx src/tests/runTests.ts && tsx src/tests/phase321Tests.ts && tsx src/tests/phase322Tests.ts && tsx src/tests/phase323Tests.ts && tsx src/tests/phase331Tests.ts && tsx src/tests/phase331FixTests.ts",
     "sim": "tsx src/tests/sim1000.ts",
     "check:emoji": "tsx src/tests/checkEmoji.ts"
   },

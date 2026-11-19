@@ -1,3 +1,4 @@
+import { UI_TEXT } from '../../../data/uiText';
 import { cleanDisplayReason } from '../../../engine/explain';
 import type { GameState } from '../../../engine/types';
 import { PixelIcon } from '../../art/PixelIcons';
@@ -11,6 +12,7 @@ interface JournalTabProps {
 
 export function JournalTab({ state, onOpenSaveLoad, onSelectExplain }: JournalTabProps) {
   const recentLogs = state.statLogs.slice(-30).reverse();
+  const lifeHistory = state.character.lifeHistory ?? [];
 
   return (
     <div className="space-y-4">
@@ -32,6 +34,49 @@ export function JournalTab({ state, onOpenSaveLoad, onSelectExplain }: JournalTa
           <PixelIcon name="folder" size={16} />
           <span>เซฟ / โหลด</span>
         </button>
+      </div>
+
+      {/* ประวัติชีวิตและจุดเปลี่ยนที่ผ่านมา (Life History) */}
+      <div className="game-card p-4 space-y-2.5">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <PixelIcon name="life" size={18} />
+            <h4 className="font-display font-extrabold text-sm text-[#3D2D52] dark:text-[#FFF6FA]">
+              {UI_TEXT.PHASE331.lifeHistoryHeading}
+            </h4>
+          </div>
+          <span className="text-xs text-[#76658D] dark:text-[#CBBFE3] font-num font-bold">
+            {lifeHistory.length} รายการ
+          </span>
+        </div>
+        {lifeHistory.length === 0 ? (
+          <p className="text-xs text-[#76658D] dark:text-[#CBBFE3]">
+            {UI_TEXT.PHASE331.lifeHistoryEmpty}
+          </p>
+        ) : (
+          <ul className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+            {lifeHistory.map((item) => (
+              <li
+                key={item.id}
+                className="px-inset p-2.5 bg-[#FFFDFB] dark:bg-[#221B3B] text-xs space-y-0.5"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-display font-bold text-[#3D2D52] dark:text-[#FFF6FA]">
+                    {item.titleTh}
+                  </span>
+                  <span className="text-[11px] font-num text-[#76658D] dark:text-[#CBBFE3] shrink-0">
+                    {item.dateLabel} · อายุ {item.ageYears} ปี
+                  </span>
+                </div>
+                {item.detailTh && (
+                  <p className="text-[11px] text-[#5A4773] dark:text-[#DDD6FE]">
+                    {item.detailTh}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       {/* คิวผลสะท้อน (Echo Queue) */}

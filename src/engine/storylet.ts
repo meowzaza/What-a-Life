@@ -1,6 +1,7 @@
 import { ALLOWED_STORYLET_EFFECT_TYPES } from '../data/storylets/directorConfig';
 import { TRAITS_BY_ID } from '../data/traits';
 import { evaluateAppearanceImpact, getActiveAppearanceTags } from './appearance';
+import { isDropoutCrisisEligible } from './education';
 import { getLifeSubStageId } from './lifeStage';
 import { SCENES_BY_ID, type Daypart } from './scene';
 import type {
@@ -10,6 +11,7 @@ import type {
   FamilyWealthTier,
   GameState,
   Gender,
+  HighSchoolTrack,
   HousingId,
   LifeIndices,
   LifeSubStageId,
@@ -17,6 +19,8 @@ import type {
   RawStats,
   RegionId,
   SceneTag,
+  SkillKey,
+  SkillLevelState,
   StoryletCategory,
   TempResources,
   TraitIntensity,
@@ -82,6 +86,14 @@ export interface StoryletConditions {
   minSocialKidsPlayWeeks?: number;
   requireTier2FocusedSkill?: boolean;
   requireAnnualFocusSet?: boolean;
+  /** Phase 3.3.1 talent hint, dropout crisis & education conditions */
+  requireUnrevealedTalent?: boolean;
+  requireLimitationId?: string;
+  minDebt?: number;
+  maxGpa?: number;
+  requireEmployed?: boolean;
+  requireDropoutCrisisEligible?: boolean;
+  requiredHsTracks?: HighSchoolTrack[];
 }
 
 export interface BlockedByTraitRule {
@@ -100,6 +112,12 @@ export interface StoryletChoice {
   forbiddenTraits?: string[];
   blockedByTraits?: BlockedByTraitRule[];
   requiredStats?: Partial<LifeIndices & TempResources & RawStats>;
+  requiredWealth?: FamilyWealthTier[];
+  requiredAnyTalents?: string[];
+  requiredSkills?: Partial<Record<SkillKey, number>>;
+  requiredMinGpa?: number;
+  requiredMinRawStats?: Partial<Record<keyof RawStats, number>>;
+  conditionalUnlockReasonTh?: string;
   costCash?: number;
   twistChance?: number; // 0 to 1
   twistEffects?: Effect[];
@@ -607,9 +625,11 @@ export function isStoryletEligible(
   if (cond.requireTier2FocusedSkill) {
     const focus = state.skillTraining?.focus ?? [];
     const courseSkill = state.skillTraining?.course?.skillId;
+    const skillStates: Partial<Record<SkillKey, SkillLevelState>> = state.skillTraining?.skillStates ?? {};
     const hasTier2 =
-      focus.some((sk) => (character.skills[sk] ?? 0) >= 30) ||
-      Boolean(courseSkill && (state.skillTraining?.course?.weeksLeft ?? 0) > 0);
+      focus.some(
+        (sk) => (skillStates[sk]?.unlockedTier ?? 1) >= 2 || (skillStates[sk]?.level ?? 1) >= 2 || (character.skills[sk] ?? 0) >= 30
+      ) || Boolean(courseSkill && (state.skillTraining?.course?.weeksLeft ?? 0) > 0);
     if (!hasTier2) {
       return false;
     }
@@ -617,6 +637,59 @@ export function isStoryletEligible(
   if (cond.requireAnnualFocusSet) {
     const af = state.planner?.annualFocus;
     if (!af || af.current === 'none') {
+      return false;
+    }
+  }
+
+  if (cond.requireUnrevealedTalent) {
+    const allTalents = [...(character.talents ?? []), ...(character.talentVault ?? [])];
+    const hasUnrevealed = allTalents.some((t) => !t.revealed);
+    if (!hasUnrevealed) {
+      return false;
+    }
+  }
+
+  if (cond.requireEmployed) {
+    const isEmployed =
+      state.employment?.status === 'employed' ||
+      (state.economy.jobId !== 'none' &&
+        state.economy.jobId !== 'infant' &&
+        state.economy.jobId !== 'student' &&
+        state.economy.jobId !== 'unemployed');
+    if (!isEmployed) {
+      return false;
+    }
+  }
+
+  if (cond.requireDropoutCrisisEligible) {
+    if (!isDropoutCrisisEligible(state)) {
+      return false;
+    }
+  }
+
+  if (cond.requiredHsTracks && cond.requiredHsTracks.length > 0) {
+    const curTrack = character.educationState?.highSchoolTrack;
+    if (!curTrack || !cond.requiredHsTracks.includes(curTrack)) {
+      return false;
+    }
+  }
+
+  if (cond.requireLimitationId) {
+    const hasLim = (character.limitations ?? []).some(
+      (l) => l.id === cond.requireLimitationId && l.curedAtAge === undefined
+    );
+    if (!hasLim) {
+      return false;
+    }
+  }
+
+  if (cond.minDebt !== undefined && economy.debt < cond.minDebt) {
+    return false;
+  }
+
+  if (cond.maxGpa !== undefined) {
+    const gpa = character.educationState?.currentGpa ?? 3.0;
+    if (gpa > cond.maxGpa) {
       return false;
     }
   }
@@ -728,10 +801,82 @@ export function evaluateStoryletChoice(
         return {
           visible: true,
           disabled: true,
-          disabledReason: `ค่าสถานะยังไม่ถึงเกณฑ์`,
+          disabledReason: choice.conditionalUnlockReasonTh ?? `ค่าสถานะยังไม่ถึงเกณฑ์`,
         };
       }
     }
+  }
+
+  if (choice.requiredWealth && choice.requiredWealth.length > 0) {
+    if (!choice.requiredWealth.includes(state.character.background.familyWealth)) {
+      return {
+        visible: true,
+        disabled: true,
+        disabledReason: choice.conditionalUnlockReasonTh ?? 'ฐานะหรือเงื่อนไขครอบครัวยังไม่ตรงเกณฑ์',
+      };
+    }
+  }
+
+  if (choice.requiredAnyTalents && choice.requiredAnyTalents.length > 0) {
+    const allOwned = [
+      ...(state.character.talents ?? []),
+      ...(state.character.talentVault ?? []),
+    ];
+    const ownedRevealed = allOwned.filter((t) => t.revealed).map((t) => t.id);
+    if (!choice.requiredAnyTalents.some((tid) => ownedRevealed.includes(tid))) {
+      return {
+        visible: true,
+        disabled: true,
+        disabledReason: choice.conditionalUnlockReasonTh ?? 'ยังไม่มีพรสวรรค์ที่เปิดเผยตรงกับเงื่อนไขนี้',
+      };
+    }
+  }
+
+  if (choice.requiredSkills) {
+    for (const [sk, minVal] of Object.entries(choice.requiredSkills)) {
+      const cur = state.character.skills[sk as SkillKey] ?? 0;
+      if (typeof minVal === 'number' && cur < minVal) {
+        return {
+          visible: true,
+          disabled: true,
+          disabledReason: choice.conditionalUnlockReasonTh ?? 'ทักษะยังไม่ถึงเกณฑ์ของทางเลือกนี้',
+        };
+      }
+    }
+  }
+
+  if (choice.requiredMinGpa !== undefined) {
+    const gpa = state.character.educationState?.currentGpa ?? 2.5;
+    if (gpa < choice.requiredMinGpa) {
+      return {
+        visible: true,
+        disabled: true,
+        disabledReason:
+          choice.conditionalUnlockReasonTh ??
+          `ต้องมีเกรดเฉลี่ยตั้งแต่ ${choice.requiredMinGpa.toFixed(2)} ขึ้นไป`,
+      };
+    }
+  }
+
+  if (choice.requiredMinRawStats) {
+    for (const [rk, minVal] of Object.entries(choice.requiredMinRawStats)) {
+      const cur = state.character.rawStats[rk as keyof RawStats] ?? 0;
+      if (typeof minVal === 'number' && cur < minVal) {
+        return {
+          visible: true,
+          disabled: true,
+          disabledReason: choice.conditionalUnlockReasonTh ?? 'พื้นฐานยังไม่ถึงเกณฑ์ของทางเลือกนี้',
+        };
+      }
+    }
+  }
+
+  if (state.character.ageYears < 15 && choice.costCash && choice.costCash > 0) {
+    return {
+      visible: true,
+      disabled: true,
+      disabledReason: 'อายุต่ำกว่า 15 ปี ไม่สามารถใช้จ่ายเงินส่วนตัวได้',
+    };
   }
 
   if (choice.costCash && state.economy.cash < choice.costCash) {
@@ -774,6 +919,12 @@ export function filterStoryletChoices(
         minIntensity: b.minIntensity,
         reasonTh: b.reasonTh,
       })),
+      requiredWealth: ch.requiredWealth,
+      requiredAnyTalents: ch.requiredAnyTalents,
+      requiredSkills: ch.requiredSkills,
+      requiredMinGpa: ch.requiredMinGpa,
+      requiredMinRawStats: ch.requiredMinRawStats,
+      conditionalUnlockReasonTh: ch.conditionalUnlockReasonTh,
       effects: ch.effects,
       costCash: ch.costCash,
       disabled: evalRes.disabled,

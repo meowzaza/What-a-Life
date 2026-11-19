@@ -347,8 +347,15 @@ export function maybeRollMonthlyAutopilotEvent(
   const next = { ...state, rngState: r.rngState };
   const orders = next.standingOrders ?? createDefaultStandingOrders(next.character);
 
-  // Trigger low cash overtime check or periodic situation (~38% per month)
-  if (next.economy.cash < orders.financial.lowCashThreshold && r.value < 0.55) {
+  const isEmployed =
+    next.employment?.status === 'employed' ||
+    (next.economy.jobId !== 'none' &&
+      next.economy.jobId !== 'infant' &&
+      next.economy.jobId !== 'student' &&
+      next.economy.jobId !== 'unemployed');
+
+  // Trigger low cash overtime check only when employed, or periodic situation (~36% per month)
+  if (isEmployed && next.economy.cash < orders.financial.lowCashThreshold && r.value < 0.55) {
     return {
       state: next,
       situation: buildAutopilotSituation('overtime_offer', next.date.totalDays, next.character.isMinor),
@@ -360,8 +367,12 @@ export function maybeRollMonthlyAutopilotEvent(
   }
 
   const pool: Array<StandingConditionKey | 'payday_temptation'> = next.character.isMinor
-    ? ['payday_temptation', 'overtime_offer']
-    : ['payday_temptation', 'overtime_offer', 'night_invite', 'risky_windfall'];
+    ? isEmployed
+      ? ['payday_temptation', 'overtime_offer']
+      : ['payday_temptation']
+    : isEmployed
+      ? ['payday_temptation', 'overtime_offer', 'night_invite', 'risky_windfall']
+      : ['payday_temptation', 'night_invite', 'risky_windfall'];
 
   const pickRoll = nextRandom(next.rngState);
   const chosenKind = pool[Math.floor(pickRoll.value * pool.length) % pool.length];

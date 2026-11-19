@@ -11,6 +11,7 @@ import {
   type PlannerArchetype,
 } from '../data/lifestyleTemplates';
 import sceneManifestRaw from '../data/sceneManifest.json';
+import { ALL_SKILL_IDS } from '../data/skills';
 import { SKILL_TRAINING_CONFIG, SKILL_UNLOCK_RULES } from '../data/skillTraining';
 import {
   ALL_DAY_TYPES,
@@ -145,6 +146,8 @@ export interface PlannerImpactPreview {
     skillId: SkillKey;
     labelTh: string;
     level: number;
+    maxLevelForTier?: number;
+    levelNameTh?: string;
     effectiveCap: number;
     atCap: boolean;
     estimatedWeeklyGain: number;
@@ -350,6 +353,29 @@ export function countFreelanceSlots(grid: PlannerGrid, state: GameState): number
     for (const slot of ALL_SLOTS) {
       if (isSlotLocked(dt, slot, state).locked) continue;
       if (resolveEffectiveSlotActivityId(grid, dt, slot, state) === 'freelance_work') {
+        count++;
+      }
+    }
+  }
+  return count;
+}
+
+export function countActivitySlotsInGrid(
+  grid: PlannerGrid,
+  actId: ActivityId,
+  state?: GameState
+): number {
+  let count = 0;
+  for (const dt of ALL_DAY_TYPES) {
+    for (const slot of ALL_SLOTS) {
+      if (state && isSlotLocked(dt, slot, state).locked) {
+        if (isSlotLocked(dt, slot, state).activityId === actId) count++;
+        continue;
+      }
+      const effective = state
+        ? resolveEffectiveSlotActivityId(grid, dt, slot, state)
+        : grid?.[dt]?.[slot];
+      if (effective === actId) {
         count++;
       }
     }
@@ -765,7 +791,7 @@ export function isActivityAvailableInSlot(
     const candidateSkills: SkillKey[] =
       focus.length > 0
         ? focus
-        : ['english', 'sales', 'finance', 'tech', 'craft', 'cooking', 'socializing', 'academic'];
+        : [...ALL_SKILL_IDS];
     const anyTier3 = candidateSkills.some((sk) => isTier3Unlocked(state, sk));
     if (!anyTier3) {
       const targetSkill = candidateSkills[0];
@@ -1088,6 +1114,24 @@ export function sanitizeGridForState(grid: PlannerGrid, state: GameState): Plann
     }
   }
 
+  // Enforce maxWeeklySlots per activity definition (e.g. kid_home_games <= 4)
+  for (const act of ACTIVITY_CATALOG) {
+    if (act.maxWeeklySlots !== undefined) {
+      let actCount = 0;
+      for (const dt of ALL_DAY_TYPES) {
+        for (const sl of ALL_SLOTS) {
+          if (isSlotLocked(dt, sl, state).locked) continue;
+          if (next[dt][sl] === act.id) {
+            actCount++;
+            if (actCount > act.maxWeeklySlots) {
+              next[dt][sl] = getSafeUnlockedFallback(sl, archetype);
+            }
+          }
+        }
+      }
+    }
+  }
+
   return next;
 }
 
@@ -1179,6 +1223,18 @@ export function validatePlanner(grid: PlannerGrid, state: GameState): PlannerVal
   const freelanceSlots = countFreelanceSlots(grid, state);
   if (freelanceSlots > 7) {
     errors.push('รับงานฟรีแลนซ์ได้สูงสุด 7 ช่วง/สัปดาห์ เพื่อให้ร่างกายมีเวลาพักผ่อนเพียงพอ');
+  }
+
+  // Part D: Enforce maxWeeklySlots per activity definition (e.g. kid_home_games <= 4)
+  for (const act of ACTIVITY_CATALOG) {
+    if (act.maxWeeklySlots !== undefined) {
+      const count = countActivitySlotsInGrid(grid, act.id, state);
+      if (count > act.maxWeeklySlots) {
+        errors.push(
+          `กิจกรรม "${act.nameTh}" จัดได้สูงสุดไม่เกิน ${act.maxWeeklySlots} ช่อง/สัปดาห์ (ปัจจุบันใส่ไป ${count} ช่อง)`
+        );
+      }
+    }
   }
 
   const sum =
@@ -1913,6 +1969,8 @@ export function previewPlannerImpact(grid: PlannerGrid, state: GameState): Plann
       skillId: sk,
       labelTh: SKILL_LABELS[sk]?.label ?? sk,
       level: d.level,
+      maxLevelForTier: d.maxLevelForTier,
+      levelNameTh: d.levelNameTh,
       effectiveCap: d.effectiveCap,
       atCap: d.atCap,
       estimatedWeeklyGain: d.estimatedWeeklyGain,

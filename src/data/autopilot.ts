@@ -211,7 +211,7 @@ export const AUTOPILOT_SITUATION_TEMPLATES: Omit<AutopilotSituation, 'id'>[] = [
         requiresAdult: true,
         effects: [
           { type: 'AddMoney', amount: -600, category: 'living', reason: 'ค่าอาหารเครื่องดื่มสังสรรค์กับเพื่อน' },
-          { type: 'ChangeSkill', skill: 'socializing', delta: 0.8, reason: 'เข้าสังคมพูดคุยกับเพื่อนฝูง' },
+          { type: 'ChangeSkill', skill: 'social', delta: 0.8, reason: 'เข้าสังคมพูดคุยกับเพื่อนฝูง' },
           { type: 'ChangeResource', resource: 'energy', delta: -8, reason: 'นอนดึกหลังสังสรรค์' },
           { type: 'RecordEvidence', key: 'night_out', amount: 2, reason: 'ออกไปเที่ยวสังสรรค์กลางคืน' },
           { type: 'RecordEvidence', key: 'peer_follow', amount: 1.5, reason: 'ตอบรับคำชวนของกลุ่มเพื่อน' },

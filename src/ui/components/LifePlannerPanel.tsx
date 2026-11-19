@@ -10,6 +10,7 @@ import {
 import { ANNUAL_FOCUS_BY_ID, ANNUAL_FOCUS_LIST } from '../../data/annualFocus';
 import { AGE_LEGAL_RULES } from '../../data/lifeStages';
 import { LIFESTYLE_PRESETS, LIFESTYLE_PRESETS_BY_ID } from '../../data/lifestylePresets';
+import { ACTIVITY_SKILL_TAGS } from '../../data/skills';
 import {
   ALL_SLOTS,
   DAY_TYPE_WEIGHTS,
@@ -44,6 +45,7 @@ import { getSkillGrowthDetails } from '../../engine/skillTraining';
 import type {
   ActivityId,
   ActivityMajorGroup,
+  ActivitySkillTagId,
   DayType,
   GameState,
   LifestylePresetId,
@@ -857,6 +859,65 @@ export function LifePlannerPanel({
             </div>
           </div>
 
+          {/* 4b. Sub-Focus Activity Skill Tag Selector (hobby_leisure, self_study, attend_course, university_club) */}
+          {(() => {
+            const subfocusActivityIds = ['hobby_leisure', 'self_study', 'attend_course', 'university_club'] as const;
+            const activeSubfocusActs = subfocusActivityIds.filter((actId) =>
+              (['weekday', 'weekend'] as const).some((dt) =>
+                ALL_SLOTS.some(
+                  (sl) => resolveEffectiveSlotActivityId(draftGrid, dt, sl, state) === actId
+                )
+              )
+            );
+            if (activeSubfocusActs.length === 0) return null;
+            return (
+              <div className="px-slot p-3 bg-[#FFFDFB] dark:bg-[#221B3B] space-y-2 text-xs">
+                <div className="font-display font-extrabold text-[#3D2D52] dark:text-[#FFF6FA]">
+                  {UI_TEXT.PHASE331.activitySubfocusLabel}
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {activeSubfocusActs.map((actId) => {
+                    const def = ACTIVITIES_BY_ID.get(actId);
+                    if (!def?.selectableSkillTags || def.selectableSkillTags.length === 0) return null;
+                    const currentTag =
+                      state.planner?.activitySkillTags?.[actId] ??
+                      def.defaultSkillTags?.[0] ??
+                      def.selectableSkillTags[0];
+                    return (
+                      <div key={actId} className="space-y-1">
+                        <label
+                          htmlFor={`subfocus-${actId}`}
+                          className="block text-[11px] font-bold text-[#5A4773] dark:text-[#DDD6FE]"
+                        >
+                          {def.nameTh}
+                        </label>
+                        <select
+                          id={`subfocus-${actId}`}
+                          disabled={!character.isAlive}
+                          value={currentTag}
+                          onChange={(e) =>
+                            onDispatch({
+                              type: 'SET_ACTIVITY_SUBFOCUS',
+                              activityId: actId,
+                              tagId: e.target.value as ActivitySkillTagId,
+                            })
+                          }
+                          className="w-full px-slot px-2 py-1.5 text-xs font-semibold bg-[#FFF0F6] dark:bg-[#352B59] text-[#3D2D52] dark:text-[#FFF6FA]"
+                        >
+                          {def.selectableSkillTags.map((tagId) => (
+                            <option key={tagId} value={tagId}>
+                              {ACTIVITY_SKILL_TAGS[tagId]?.labelTh ?? tagId}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* 5. Live Weekly Impact Preview */}
           <div className="px-slot p-3 bg-[#F4F0FF] dark:bg-[#2A2247] space-y-2 text-xs">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -953,7 +1014,7 @@ export function LifePlannerPanel({
                   className="flex flex-wrap items-center justify-between gap-1 text-[#5A4773] dark:text-[#DDD6FE]"
                 >
                   <span>
-                    {sk.labelTh} (ระดับ {Math.floor(sk.level)}/{sk.effectiveCap})
+                    {sk.labelTh} (Lv.{Math.floor(sk.level)} / สูงสุด Lv.{sk.maxLevelForTier ?? 2})
                   </span>
                   {sk.atCap ? (
                     <span className="text-[#BD346B] dark:text-[#FFB8D4] font-semibold">
@@ -965,11 +1026,11 @@ export function LifePlannerPanel({
                     </span>
                   ) : !sk.hasSelfDevSlot ? (
                     <span className="font-num tabular-nums font-bold text-[#167956] dark:text-[#7EF4C2]">
-                      +{sk.estimatedWeeklyGain.toFixed(2)}/สัปดาห์ (จากกิจกรรมประจำ · เพิ่มช่องพัฒนาตัวเองเพื่อฝึกเต็มที่)
+                      +{sk.estimatedWeeklyGain.toFixed(2)} XP/สัปดาห์ (จากกิจกรรมประจำ · เพิ่มช่องพัฒนาตัวเองเพื่อฝึกเต็มที่)
                     </span>
                   ) : (
                     <span className="font-num tabular-nums font-bold text-[#167956] dark:text-[#7EF4C2]">
-                      +{sk.estimatedWeeklyGain.toFixed(2)}/สัปดาห์
+                      +{sk.estimatedWeeklyGain.toFixed(2)} XP/สัปดาห์
                     </span>
                   )}
                 </div>
@@ -1183,12 +1244,29 @@ export function LifePlannerPanel({
                   act.id === 'freelance_work' &&
                   !currentlySelected &&
                   freelanceCount >= 7;
-                const effectiveAllowed = avail.allowed && !otCapBlocked && !freelanceCapBlocked;
+                const weeklySlotCount = act.maxWeeklySlots
+                  ? (['weekday', 'weekend'] as const).reduce(
+                      (acc, dt) =>
+                        acc +
+                        ALL_SLOTS.filter(
+                          (sl) => resolveEffectiveSlotActivityId(draftGrid, dt, sl, state) === act.id
+                        ).length,
+                      0
+                    )
+                  : 0;
+                const maxSlotBlocked =
+                  Boolean(act.maxWeeklySlots) &&
+                  !currentlySelected &&
+                  weeklySlotCount >= (act.maxWeeklySlots ?? 99);
+                const effectiveAllowed =
+                  avail.allowed && !otCapBlocked && !freelanceCapBlocked && !maxSlotBlocked;
                 const effectiveLockReason = otCapBlocked
                   ? UI_TEXT.PLANNER.otLimitWarning
                   : freelanceCapBlocked
                     ? 'รับงานฟรีแลนซ์ได้สูงสุด 7 ช่วง/สัปดาห์'
-                    : avail.reasonTh;
+                    : maxSlotBlocked
+                      ? `จำกัดไม่เกิน ${act.maxWeeklySlots} ช่วง/สัปดาห์ (ผู้ปกครองคุมเวลา)`
+                      : avail.reasonTh;
                 const weeklyCost =
                   act.moneyCostPerSlot * DAY_TYPE_WEIGHTS[pickerTarget.dayType];
                 const isParentPaid =
@@ -1197,8 +1275,8 @@ export function LifePlannerPanel({
                   ? focusedSkillsDetails.find(
                       (f) =>
                         f.details.atCap ||
-                        (act.id === 'self_study' && f.details.level >= 30 && !f.details.tier2Unlocked) ||
-                        (act.id === 'attend_course' && f.details.level >= 60 && !f.details.tier3Unlocked)
+                        (act.id === 'self_study' && f.details.levelNum >= 2 && !f.details.tier2Unlocked) ||
+                        (act.id === 'attend_course' && f.details.levelNum >= 4 && !f.details.tier3Unlocked)
                     )
                   : undefined;
 
@@ -1248,6 +1326,7 @@ export function LifePlannerPanel({
                       {(
                         ['energy', 'stress', 'relationship', 'skill', 'money'] as const
                       ).map((k) => {
+                        if (isParentPaid && k === 'money') return null;
                         const arrowVal = act.arrows[k];
                         if (!arrowVal) return null;
                         const fmt = formatImpactArrowLabel(arrowVal, k === 'stress');
@@ -1260,6 +1339,11 @@ export function LifePlannerPanel({
                           </span>
                         );
                       })}
+                      {act.maxWeeklySlots && (
+                        <span className="px-1.5 py-0.5 border border-[#4E3B69]/35 bg-[#FFF9DB] text-[#735100] font-bold font-num">
+                          ไม่เกิน {act.maxWeeklySlots} ช่วง/สัปดาห์
+                        </span>
+                      )}
                       {pickerOtWeeklyPay > 0 && (
                         <span className="px-1.5 py-0.5 border border-[#4E3B69]/35 bg-[#D6FAEA] text-[#165940] font-bold font-num">
                           +{pickerOtWeeklyPay.toLocaleString('th-TH')} ฿/สัปดาห์ ({slotHoursIfPicked} ชม.)

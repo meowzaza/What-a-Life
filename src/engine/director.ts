@@ -2,8 +2,10 @@ import { SELF_CARE_ORDER_CONFIG } from '../data/autopilot';
 import { DIRECTOR_CONFIG } from '../data/storylets/directorConfig';
 import { STORYLET_CATALOG } from '../data/storylets/catalog';
 import { formatShortThaiDate } from './clock';
+import { pushLifeHistory } from './education';
 import { appendTimeline, applyEffects, summarizeEffects } from './log';
 import { nextRandom, round2 } from './rng';
+import { stampTalentSwapWindow } from './talents';
 import {
   filterStoryletChoices,
   isStoryletEligible,
@@ -24,6 +26,12 @@ import type {
 
 export const T2_COOLDOWN_DAYS = DIRECTOR_CONFIG.t2CooldownDays;
 export const T3_COOLDOWN_DAYS = DIRECTOR_CONFIG.t3CooldownDays;
+
+const STORYLET_BY_ID = new Map(STORYLET_CATALOG.map((s) => [s.id, s]));
+const CALENDAR_STORYLETS = STORYLET_CATALOG.filter(
+  (s) => s.sourceHint === 'calendar' || Boolean(s.conditions?.onBirthday) || s.conditions?.calendarMonth !== undefined
+);
+const STAT_THRESHOLD_STORYLETS = STORYLET_CATALOG.filter((s) => s.sourceHint === 'stat_threshold');
 
 // === Phase 4 / 5 / 7 Event Source Extension Stubs ===
 export interface NpcEventProposal {
@@ -124,8 +132,8 @@ function canPassDirectorBudgetAndCooldowns(
   const totalDays = state.date.totalDays;
   const budget = directorState.tensionBudget ?? DIRECTOR_CONFIG.tensionBudget.start;
 
-  // Minors < 15 only experience T0 / T1 background & flavor
-  if (state.character.ageYears < 15 && (def.tier === 'T2' || def.tier === 'T3')) {
+  // Minors < 15 only experience T0 / T1 background & flavor unless marked isMinorSafe
+  if (state.character.ageYears < 15 && (def.tier === 'T2' || def.tier === 'T3') && !def.conditions?.isMinorSafe) {
     return false;
   }
 
@@ -235,6 +243,7 @@ export function stepEventDirector(
         workingState,
         'หมดเวลาตัดสินใจ ระบบจึงช่วยเลือกทางเดินที่เข้ากับนิสัยของคุณให้แทน'
       );
+      return { state: workingState };
     } else {
       return { state: workingState };
     }
@@ -256,7 +265,7 @@ export function stepEventDirector(
   if (directorState.consequenceQueue && directorState.consequenceQueue.length > 0) {
     const dueIdx = directorState.consequenceQueue.findIndex((item) => {
       if (item.dueTotalDay > workingState.date.totalDays) return false;
-      const def = STORYLET_CATALOG.find((s) => s.id === item.storyletId);
+      const def = STORYLET_BY_ID.get(item.storyletId);
       if (!def) return true;
       if (item.originId === 'foreshadow') return true;
       if (
@@ -283,7 +292,7 @@ export function stepEventDirector(
       };
       workingState = { ...workingState, directorState };
 
-      const storylet = STORYLET_CATALOG.find((s) => s.id === dueItem.storyletId);
+      const storylet = STORYLET_BY_ID.get(dueItem.storyletId);
       if (storylet && isStoryletEligible(storylet, workingState, { ignoreCooldown: true })) {
         candidateStorylet = storylet;
         skipForeshadow = dueItem.originId === 'foreshadow';
@@ -297,14 +306,9 @@ export function stepEventDirector(
 
   // === Source 1: Calendar / Life Stage Triggers ===
   if (!candidateStorylet) {
-    const calendarCandidates = STORYLET_CATALOG.filter((s) => {
-      const isCalendarCard =
-        s.sourceHint === 'calendar' ||
-        Boolean(s.conditions?.onBirthday) ||
-        s.conditions?.calendarMonth !== undefined;
-      if (!isCalendarCard) return false;
-      return canPassDirectorBudgetAndCooldowns(s, workingState, directorState);
-    });
+    const calendarCandidates = CALENDAR_STORYLETS.filter((s) =>
+      canPassDirectorBudgetAndCooldowns(s, workingState, directorState)
+    );
     if (calendarCandidates.length > 0) {
       const picked = pickWeightedStorylet(calendarCandidates, workingState);
       candidateStorylet = picked.chosen;
@@ -322,10 +326,9 @@ export function stepEventDirector(
       (character.ageYears >= 18 && economy.cash <= DIRECTOR_CONFIG.statThresholds.lowCashAdult);
 
     if (thresholdTriggered) {
-      const thresholdCandidates = STORYLET_CATALOG.filter((s) => {
-        if (s.sourceHint !== 'stat_threshold') return false;
-        return canPassDirectorBudgetAndCooldowns(s, workingState, directorState);
-      });
+      const thresholdCandidates = STAT_THRESHOLD_STORYLETS.filter((s) =>
+        canPassDirectorBudgetAndCooldowns(s, workingState, directorState)
+      );
       if (thresholdCandidates.length > 0) {
         const picked = pickWeightedStorylet(thresholdCandidates, workingState);
         candidateStorylet = picked.chosen;
@@ -712,7 +715,7 @@ export function resolveStoryletChoice(
     }
   }
 
-  if (!isTwisted && choice.costCash && choice.costCash > 0) {
+  if (!isTwisted && choice.costCash && choice.costCash > 0 && workingState.character.ageYears >= 15) {
     workingState = {
       ...workingState,
       economy: {
@@ -788,6 +791,19 @@ export function resolveStoryletChoice(
       : prompt.directorReason,
     storyletId: prompt.storyletId,
   });
+
+  if (prompt.tier === 'T3') {
+    workingState = stampTalentSwapWindow(
+      workingState,
+      `t3_${prompt.storyletId ?? 'prompt'}_${workingState.date.totalDays}`
+    );
+    workingState = pushLifeHistory(workingState, {
+      id: `t3_${prompt.storyletId ?? 'prompt'}_${workingState.date.totalDays}`,
+      kind: 'turning_point',
+      titleTh: prompt.title,
+      detailTh: choice.label,
+    });
+  }
 
   workingState = {
     ...workingState,

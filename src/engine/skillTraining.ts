@@ -1,7 +1,16 @@
 import { ACTIVITIES_BY_ID } from '../data/activities';
 import {
+  ALL_SKILL_IDS,
+  CORE_SKILL_IDS,
+  DISCOVERED_SKILL_IDS,
+  DISCOVERY_THRESHOLD_HOURS,
+  DISCOVERY_THRESHOLD_SESSIONS,
+  getSkillsForActivityTag,
+} from '../data/skills';
+import {
   SKILL_AGE_MULTIPLIERS,
   SKILL_APTITUDE_STATS,
+  SKILL_LEVEL_CONFIG,
   SKILL_TIERS,
   SKILL_TRAINING_CONFIG,
   SKILL_TRAIT_MULTIPLIERS,
@@ -12,75 +21,202 @@ import {
   ALL_DAY_TYPES,
   ALL_SLOTS,
   DAY_TYPE_WEIGHTS,
-  NIGHT_AWAKE_SLEEP_PENALTY_HOURS,
   SLOT_HOURS,
 } from '../data/slotHours';
 import { JOBS, SKILL_LABELS } from '../data/thaiData';
 import { DEFAULT_TIME_ALLOC_BY_STAGE } from '../data/timeAlloc';
 import { UI_TEXT } from '../data/uiText';
-import { formatShortThaiDate } from './clock';
+import { discoverSkillOnState, pushLifeHistory } from './education';
 import { getLifeSubStageId } from './lifeStage';
 import { appendTimeline, applyEffects } from './log';
 import { clamp, round2 } from './rng';
-import type { GameState, SkillKey, SkillTrainingState, TimeAllocation } from './types';
+import {
+  computeCombinedSkillMultiplier,
+  getDiscoveryThresholdReduction,
+  revealTalentById,
+} from './talents';
+import type {
+  ActivitySkillTagId,
+  DiscoveredSkillId,
+  GameState,
+  SkillKey,
+  SkillLevelNum,
+  SkillLevelState,
+  SkillTierId,
+  SkillTrainingState,
+  TimeAllocation,
+} from './types';
 
-export const ALL_SKILL_KEYS: readonly SkillKey[] = [
-  'english',
-  'sales',
-  'finance',
-  'tech',
-  'craft',
-  'cooking',
-  'socializing',
-  'academic',
-] as const;
+export const ALL_SKILL_KEYS: readonly SkillKey[] = ALL_SKILL_IDS;
 
-function zeroSkillRecord(): Record<SkillKey, number> {
+export function zeroSkillRecord(): Record<SkillKey, number> {
   return {
-    english: 0,
-    sales: 0,
-    finance: 0,
+    academic: 0,
     tech: 0,
     craft: 0,
-    cooking: 0,
-    socializing: 0,
-    academic: 0,
+    social: 0,
+    business: 0,
+    athletics: 0,
+    foreign_lang: 0,
+    culinary: 0,
+    visual_arts: 0,
+    music_vocal: 0,
+    performing_acting: 0,
+    dance_thai_modern: 0,
+    literature_writing: 0,
   };
+}
+
+export function isCoreSkill(skill: SkillKey): boolean {
+  return (CORE_SKILL_IDS as string[]).includes(skill);
+}
+
+export function isSkillVisible(state: GameState, skill: SkillKey): boolean {
+  if (isCoreSkill(skill)) return true;
+  if ((state.character.skills[skill] ?? 0) > 0) return true;
+  return (state.skillTraining?.discoveredSkills ?? []).includes(skill as DiscoveredSkillId);
+}
+
+export function getVisibleSkills(state: GameState): SkillKey[] {
+  return ALL_SKILL_IDS.filter((sk) => isSkillVisible(state, sk));
+}
+
+export function convertLevelToCompatScore(levelState?: SkillLevelState): number {
+  if (!levelState) return 0;
+  if (levelState.level >= 5) return SKILL_LEVEL_CONFIG.maxCompatScoreAtLv5;
+  const threshold = SKILL_LEVEL_CONFIG.xpThresholds[levelState.level] ?? 100;
+  const pct = threshold > 0 ? clamp(levelState.xp / threshold, 0, 1) : 0;
+  return Math.min(
+    SKILL_LEVEL_CONFIG.maxCompatScoreAtLv5,
+    Math.floor(20 * (levelState.level - 1) + 19 * pct)
+  );
+}
+
+export function createInitialSkillLevelState(
+  level: SkillLevelNum = 1,
+  unlockedTier: SkillTierId = 1,
+  xp = 0,
+  certificates: string[] = [],
+  unlockedViaChildEvent = false
+): SkillLevelState {
+  return {
+    level,
+    xp,
+    unlockedTier,
+    certificates: [...certificates],
+    unlockedViaChildEvent,
+  };
+}
+
+export function convertCompatScoreToSkillLevelState(
+  rawScore: number,
+  existing?: SkillLevelState
+): SkillLevelState {
+  if (existing) {
+    return {
+      ...existing,
+      certificates: [...(existing.certificates ?? [])],
+    };
+  }
+  const s = clamp(rawScore ?? 0, 0, 100);
+  let level: SkillLevelNum = 1;
+  let xp = 0;
+  let unlockedTier: SkillTierId = 1;
+  if (s >= 80) {
+    level = 5;
+    xp = 0;
+    unlockedTier = 3;
+  } else if (s >= 60) {
+    level = 4;
+    xp = Math.round(((s - 60) / 20) * (SKILL_LEVEL_CONFIG.xpThresholds[4] ?? 1500));
+    unlockedTier = 2;
+  } else if (s >= 40) {
+    level = 3;
+    xp = Math.round(((s - 40) / 20) * (SKILL_LEVEL_CONFIG.xpThresholds[3] ?? 700));
+    unlockedTier = 2;
+  } else if (s >= 20) {
+    level = 2;
+    xp = Math.round(((s - 20) / 20) * (SKILL_LEVEL_CONFIG.xpThresholds[2] ?? 300));
+    unlockedTier = 1;
+  } else {
+    level = 1;
+    xp = Math.round((s / 20) * (SKILL_LEVEL_CONFIG.xpThresholds[1] ?? 100));
+    unlockedTier = 1;
+  }
+  return createInitialSkillLevelState(level, unlockedTier, xp, []);
+}
+
+export function buildSkillStatesFromCompatSkills(
+  skills: Partial<Record<SkillKey, number>>,
+  existingStates?: Partial<Record<SkillKey, SkillLevelState>>
+): Record<SkillKey, SkillLevelState> {
+  const out: Partial<Record<SkillKey, SkillLevelState>> = {};
+  for (const sk of ALL_SKILL_IDS) {
+    out[sk] = convertCompatScoreToSkillLevelState(skills[sk] ?? 0, existingStates?.[sk]);
+  }
+  return out as Record<SkillKey, SkillLevelState>;
 }
 
 export function createInitialSkillTrainingState(
   existing?: Partial<SkillTrainingState>
 ): SkillTrainingState {
+  const initialStates: Partial<Record<SkillKey, SkillLevelState>> = {};
+  for (const sk of ALL_SKILL_IDS) {
+    if (existing?.skillStates?.[sk]) {
+      const s = existing.skillStates[sk]!;
+      initialStates[sk] = {
+        ...s,
+        certificates: [...(s.certificates ?? [])],
+      };
+    } else {
+      initialStates[sk] = createInitialSkillLevelState(1, 1, 0, []);
+    }
+  }
+
   return {
-    focus: existing?.focus ? [...existing.focus].slice(0, SKILL_TRAINING_CONFIG.maxFocusSkills) : [],
+    focus: existing?.focus
+      ? [...existing.focus].filter((k) => ALL_SKILL_IDS.includes(k)).slice(0, SKILL_TRAINING_CONFIG.maxFocusSkills)
+      : [],
     course: existing?.course ? { ...existing.course } : null,
     xp: { ...zeroSkillRecord(), ...(existing?.xp ?? {}) },
     lastPracticedWeek: { ...zeroSkillRecord(), ...(existing?.lastPracticedWeek ?? {}) },
+    discoveredSkills: existing?.discoveredSkills ? [...existing.discoveredSkills] : [],
+    skillStates: initialStates as Record<SkillKey, SkillLevelState>,
+    tagProgress: existing?.tagProgress ? { ...existing.tagProgress } : {},
+    limitationProgress: existing?.limitationProgress ? { ...existing.limitationProgress } : {},
     socialHighWeeks: existing?.socialHighWeeks ?? 0,
     savingStreakWeeks: existing?.savingStreakWeeks ?? 0,
     lastLoggedCap: existing?.lastLoggedCap ? { ...existing.lastLoggedCap } : {},
   };
 }
 
-export function getSkillTier(level: number): SkillTier {
-  if (level < SKILL_TIERS[1].maxCap) return 1;
-  if (level < SKILL_TIERS[2].maxCap) return 2;
+export function getSkillTier(levelOrTier: number): SkillTier {
+  if (levelOrTier <= 1) return 1;
+  if (levelOrTier === 2) return 2;
   return 3;
 }
 
 export function isTier2Unlocked(state: GameState, skill: SkillKey): boolean {
-  const course = state.skillTraining?.course;
-  if (course && course.skillId === skill && course.weeksLeft > 0) {
-    return true;
+  const skState = state.skillTraining?.skillStates?.[skill];
+  if (skState && skState.unlockedTier >= 2) return true;
+
+  const hsTrack = state.character.educationState?.highSchoolTrack;
+  if (hsTrack === 'sci_math' && (skill === 'academic' || skill === 'tech')) return true;
+  if (hsTrack === 'arts_math' && (skill === 'business' || skill === 'academic')) return true;
+  if (hsTrack === 'arts_lang' && (skill === 'foreign_lang' || skill === 'social')) return true;
+  if (hsTrack === 'arts_fine' && skill === (state.character.educationState?.fineArtSkill ?? 'visual_arts')) return true;
+  if (hsTrack === 'vocational') {
+    const branch = state.character.educationState?.vocationalBranch ?? 'craft';
+    if (skill === 'academic' || skill === (branch as unknown as SkillKey)) return true;
   }
-  const rule = SKILL_UNLOCK_RULES[skill];
-  if (rule.allowsSchoolTier2 && state.economy.jobId === 'student') {
-    return true;
-  }
+
   return false;
 }
 
 export function isTier3Unlocked(state: GameState, skill: SkillKey): boolean {
+  const skState = state.skillTraining?.skillStates?.[skill];
+  if (skState && skState.unlockedTier >= 3) return true;
+
   const job = JOBS[state.economy.jobId];
   if (job?.relatedSkills?.includes(skill)) {
     return true;
@@ -105,8 +241,16 @@ export function isTier3Unlocked(state: GameState, skill: SkillKey): boolean {
 
   if (
     rule.allowsSavingWealthTier3 &&
-    (state.evidence?.disciplined_saving ?? 0) >= SKILL_TRAINING_CONFIG.financeTier3MinEvidence &&
-    state.economy.cash + state.economy.assetsValue >= SKILL_TRAINING_CONFIG.financeTier3MinWealthCash
+    (state.evidence?.disciplined_saving ?? 0) >= SKILL_TRAINING_CONFIG.businessTier3MinEvidence &&
+    state.economy.cash + state.economy.assetsValue >= SKILL_TRAINING_CONFIG.businessTier3MinWealthCash
+  ) {
+    return true;
+  }
+
+  if (
+    rule.allowsWorkoutStreakTier3 &&
+    ((state.planner?.streaks?.workoutWeeks ?? 0) >= SKILL_TRAINING_CONFIG.socialTier3RequiredWeeks ||
+      Boolean(state.character.flags?.competition_unlocked))
   ) {
     return true;
   }
@@ -114,22 +258,29 @@ export function isTier3Unlocked(state: GameState, skill: SkillKey): boolean {
   return false;
 }
 
-/**
- * Returns the maximum achievable skill level given the character's currently unlocked sources.
- * Never reduces existing over-cap levels from legacy saves; freezes positive gain once >= cap.
- */
-export function getEffectiveSkillCap(state: GameState, skill: SkillKey): number {
-  const level = state.character.skills[skill] ?? 0;
-  const tier2 = isTier2Unlocked(state, skill);
-  const tier3 = isTier3Unlocked(state, skill);
+export function getMaxLevelForSkill(state: GameState, skill: SkillKey): SkillLevelNum {
+  const skState = state.skillTraining?.skillStates?.[skill];
+  const unlockedTier = Math.max(
+    skState?.unlockedTier ?? 1,
+    isTier3Unlocked(state, skill) ? 3 : isTier2Unlocked(state, skill) ? 2 : 1
+  ) as SkillTierId;
 
-  if (tier3 && (tier2 || level >= 60)) {
-    return 100;
+  if (unlockedTier === 3) return 5;
+  if (unlockedTier === 2) {
+    if (skState?.unlockedViaChildEvent && (!skState.certificates || skState.certificates.length === 0)) {
+      return SKILL_LEVEL_CONFIG.childEventTier2MaxLevel; // Lv.3
+    }
+    return 4;
   }
-  if (tier2) {
-    return 60;
-  }
-  return 30;
+  return 2;
+}
+
+export function getEffectiveSkillCap(state: GameState, skill: SkillKey): number {
+  const maxLvl = getMaxLevelForSkill(state, skill);
+  if (maxLvl === 5) return 90;
+  if (maxLvl === 4) return 79;
+  if (maxLvl === 3) return 59;
+  return 39;
 }
 
 export function computeAptitudeMult(state: GameState, skill: SkillKey): number {
@@ -163,10 +314,24 @@ export function computeAgeMult(state: GameState): number {
   return SKILL_AGE_MULTIPLIERS[stageId] ?? 1.0;
 }
 
+export function computeStressMult(state: GameState): number {
+  return state.character.resources.stress > SKILL_LEVEL_CONFIG.stressHighThreshold
+    ? SKILL_LEVEL_CONFIG.stressHighMult
+    : 1.0;
+}
+
 export function computeEnergyMult(state: GameState): number {
-  return state.character.resources.energy < SKILL_TRAINING_CONFIG.energyLowThreshold
-    ? SKILL_TRAINING_CONFIG.energyLowMult
-    : SKILL_TRAINING_CONFIG.energyNormalMult;
+  return computeStressMult(state);
+}
+
+export function computeIntraLevelCurve(levelState: SkillLevelState): number {
+  if (levelState.level >= 5) return SKILL_LEVEL_CONFIG.intraLevelCurveEnd;
+  const threshold = SKILL_LEVEL_CONFIG.xpThresholds[levelState.level] ?? 100;
+  const pos = threshold > 0 ? clamp(levelState.xp / threshold, 0, 1) : 1;
+  return round4(
+    SKILL_LEVEL_CONFIG.intraLevelCurveStart -
+      (SKILL_LEVEL_CONFIG.intraLevelCurveStart - SKILL_LEVEL_CONFIG.intraLevelCurveEnd) * pos
+  );
 }
 
 export function computeProgressCurve(level: number, tier: SkillTier): number {
@@ -192,6 +357,9 @@ export function canEnrollCourse(
   if (state.character.ageYears < SKILL_TRAINING_CONFIG.minCourseEnrollAge) {
     return { allowed: false, reasonTh: UI_TEXT.SKILL_TRAINING.courseUnder15Lock };
   }
+  if (!isSkillVisible(state, skill)) {
+    return { allowed: false, reasonTh: 'ต้องค้นพบทักษะนี้ก่อนจึงจะลงคอร์สต่อยอดได้' };
+  }
   const active = state.skillTraining?.course;
   if (active && active.weeksLeft > 0) {
     const label = SKILL_LABELS[active.skillId]?.label ?? active.skillId;
@@ -206,26 +374,116 @@ export function canEnrollCourse(
       reasonTh: `เงินสดไม่พอค่าเรียนสัปดาห์แรก (${SKILL_TRAINING_CONFIG.courseFeePerWeek.toLocaleString('th-TH')} บาท)`,
     };
   }
-  void skill;
   return { allowed: true };
+}
+
+export function recordActivitySkillTagProgress(
+  state: GameState,
+  tagId: ActivitySkillTagId,
+  sessionsDelta: number,
+  hoursDelta: number,
+  announce = true
+): GameState {
+  if (!state.character.isAlive || state.character.ageYears < 4) return state;
+
+  const training = createInitialSkillTrainingState(state.skillTraining);
+  const tagProgress = { ...(training.tagProgress ?? {}) };
+  const prev = tagProgress[tagId] ?? { sessions: 0, hours: 0 };
+  const nextSessions = prev.sessions + Math.max(0, sessionsDelta);
+  const nextHours = round2(prev.hours + Math.max(0, hoursDelta));
+  tagProgress[tagId] = { sessions: nextSessions, hours: nextHours };
+
+  let next: GameState = {
+    ...state,
+    skillTraining: {
+      ...training,
+      tagProgress,
+    },
+  };
+
+  const taggedSkills = getSkillsForActivityTag(tagId);
+  for (const sk of taggedSkills) {
+    if ((DISCOVERED_SKILL_IDS as string[]).includes(sk)) {
+      const discId = sk as DiscoveredSkillId;
+      const alreadyDiscovered = (next.skillTraining?.discoveredSkills ?? []).includes(discId);
+      if (!alreadyDiscovered) {
+        const reduction = getDiscoveryThresholdReduction(next.character, sk);
+        const reqSessions = Math.max(1, Math.ceil(DISCOVERY_THRESHOLD_SESSIONS * (1 - reduction)));
+        const reqHours = Math.max(1, Math.ceil(DISCOVERY_THRESHOLD_HOURS * (1 - reduction)));
+
+        // 1/3 Hint trigger (ev_talent_hint)
+        const hintThreshold = reqHours / 3;
+        const hintFlag = `hint_emitted_${sk}`;
+        if (nextHours >= hintThreshold && !next.character.flags?.[hintFlag]) {
+          const matchingUnrevealed = [...(next.character.talents ?? []), ...(next.character.talentVault ?? [])].some(
+            (t) => !t.revealed
+          );
+          if (matchingUnrevealed) {
+            next = {
+              ...next,
+              character: {
+                ...next.character,
+                flags: {
+                  ...next.character.flags,
+                  [hintFlag]: true,
+                },
+              },
+              activeToast: {
+                id: `toast_talent_hint_${sk}_${state.date.totalDays}`,
+                title: 'เริ่มสังเกตเห็นแววความถนัด',
+                description: 'การฝึกฝนต่อเนื่องเริ่มเผยให้เห็นพรสวรรค์ที่ซ่อนอยู่ในการทำกิจกรรมนี้',
+                tier: 'T1',
+                category: 'milestone',
+                expiresAtTotalDay: state.date.totalDays + 10,
+              },
+            };
+            next = appendTimeline(next, {
+              category: 'life',
+              tier: 'T1',
+              title: 'สัญญาณพรสวรรค์เริ่มฉายแวว',
+              description: 'จากการฝึกฝนกิจกรรมแนวนี้ คุณเริ่มสัมผัสได้ถึงความถนัดพิเศษที่รอการเปิดเผย',
+            });
+          }
+        }
+
+        // Full threshold discovery
+        if (nextSessions >= reqSessions || nextHours >= reqHours) {
+          next = discoverSkillOnState(next, discId, announce);
+          const revealed = revealTalentById(next, undefined, sk);
+          next = revealed.state;
+        }
+      }
+    }
+  }
+
+  return next;
 }
 
 export interface SkillGrowthDetails {
   skillId: SkillKey;
   level: number;
+  levelNum: SkillLevelNum;
+  levelNameTh: string;
+  unlockedTier: SkillTierId;
+  maxLevelForTier: SkillLevelNum;
   tier: SkillTier;
   tierLabelTh: string;
   effectiveCap: number;
   atCap: boolean;
+  xp: number;
+  xpThreshold: number;
   xpProgressPct: number;
   isFocused: boolean;
   hasActiveCourse: boolean;
   tier2Unlocked: boolean;
   tier3Unlocked: boolean;
+  unlockedViaChildEvent: boolean;
+  certificates: string[];
   aptitudeMult: number;
   traitMult: number;
+  talentMult: number;
   ageMult: number;
-  energyMult: number;
+  stressMult: number;
   estimatedWeeklyGain: number;
   unlockHintTh: string;
   slowReasonsTh: string[];
@@ -235,80 +493,120 @@ export function getSkillGrowthDetails(state: GameState, skill: SkillKey): SkillG
   const training = createInitialSkillTrainingState(state.skillTraining);
   const stageId = getLifeSubStageId(state.character.ageYears);
   const alloc: TimeAllocation = state.timeAllocation ?? DEFAULT_TIME_ALLOC_BY_STAGE[stageId];
-  const level = state.character.skills[skill] ?? 0;
-  const tier = getSkillTier(level);
-  const tierDef = SKILL_TIERS[tier];
+  const skState = training.skillStates?.[skill] ?? createInitialSkillLevelState(1, 1, 0, []);
+
   const tier2 = isTier2Unlocked(state, skill);
   const tier3 = isTier3Unlocked(state, skill);
-  const effectiveCap = getEffectiveSkillCap(state, skill);
-  const atCap = level >= effectiveCap && effectiveCap < 100;
+  const effectiveTier: SkillTierId = Math.max(skState.unlockedTier, tier3 ? 3 : tier2 ? 2 : 1) as SkillTierId;
+  const maxLevel = getMaxLevelForSkill(state, skill);
+  const atCap = skState.level >= maxLevel;
+
+  const threshold = SKILL_LEVEL_CONFIG.xpThresholds[skState.level] ?? 0;
+  const xpPct = threshold > 0 ? clamp(Math.round((skState.xp / threshold) * 100), 0, 100) : 100;
+
   const isFocused = training.focus.includes(skill);
-  const hasActiveCourse =
-    training.course?.skillId === skill && (training.course?.weeksLeft ?? 0) > 0;
+  const hasActiveCourse = training.course?.skillId === skill && (training.course?.weeksLeft ?? 0) > 0;
   const rule = SKILL_UNLOCK_RULES[skill];
 
   const aptitudeMult = computeAptitudeMult(state, skill);
   const traitMult = computeTraitMult(state);
+  const talentMult = round4(computeCombinedSkillMultiplier(state.character, skill));
   const ageMult = computeAgeMult(state);
-  const energyMult = computeEnergyMult(state);
-  const progressCurve = computeProgressCurve(level, tier);
+  const stressMult = computeStressMult(state);
 
   const slowReasonsTh: string[] = [];
-  if (state.character.resources.energy < SKILL_TRAINING_CONFIG.energyLowThreshold) {
-    slowReasonsTh.push('พลังงานต่ำกว่า 30 ทำให้ฝึกได้ช้าลง (x0.6)');
+  if (state.character.resources.stress > SKILL_LEVEL_CONFIG.stressHighThreshold) {
+    slowReasonsTh.push('ความเครียดสูงกว่า 80 ทำให้การฝึกทักษะช้าลงครึ่งหนึ่ง (x0.5)');
   }
   if (hasActiveCourse && alloc.selfDev < SKILL_TRAINING_CONFIG.courseMinSelfDevHoursPerWeek) {
     slowReasonsTh.push(
-      `เวลาพัฒนาตัวเอง (${alloc.selfDev} ชม./สัปดาห์) ต่ำกว่าขั้นต่ำ ${SKILL_TRAINING_CONFIG.courseMinSelfDevHoursPerWeek} ชม. คอร์สจึงได้ผลลดลงตามสัดส่วน`
+      `เวลาพัฒนาตัวเอง (${alloc.selfDev} ชม./สัปดาห์) ต่ำกว่าขั้นต่ำ ${SKILL_TRAINING_CONFIG.courseMinSelfDevHoursPerWeek} ชม. อาจถือว่าขาดเรียนประจำสัปดาห์`
     );
   }
   if (traitMult < 1) {
     slowReasonsTh.push(`นิสัยส่วนตัวชะลอการฝึก (x${traitMult.toFixed(2)})`);
+  }
+  if (talentMult < 1) {
+    slowReasonsTh.push(`ข้อจำกัดติดตัวยังไม่ถูกแก้ทำให้พัฒนาช้าลงเล็กน้อย (x${talentMult.toFixed(2)})`);
   }
   if (ageMult < 1) {
     slowReasonsTh.push(`ช่วงวัยปรับจังหวะการเรียนรู้ (x${ageMult.toFixed(2)})`);
   }
 
   let unlockHintTh = '';
-  if (level >= 30 && level < 60 && !tier2) {
+  if (!tier2) {
     unlockHintTh = rule.tier2HintTh;
-  } else if (level < 60 && tier2 && !tier3) {
-    unlockHintTh = rule.tier3HintTh;
-  } else if (level >= 60 && !tier3) {
-    unlockHintTh = rule.tier3HintTh;
-  } else if (level < 30) {
-    unlockHintTh = atCap ? rule.tier2HintTh : `ขั้นถัดไป (30–59): ${rule.tier2SourceTh}`;
-  } else if (level < 60) {
+  } else if (skState.unlockedViaChildEvent && (!skState.certificates || skState.certificates.length === 0)) {
+    unlockHintTh = `ลงคอร์ส 8 สัปดาห์เพื่อปลดล็อกต่อจาก Lv.3 ถึง Lv.4`;
+  } else if (!tier3) {
     unlockHintTh = rule.tier3HintTh;
   } else {
-    unlockHintTh = `กำลังพัฒนาในสนามจริง: ${rule.tier3SourceTh}`;
+    unlockHintTh = 'ปลดล็อกขั้นสูงสุดแล้ว (Lv.5 เชี่ยวชาญ)';
   }
 
-  const gainEval = computeWeeklySkillGainForOne(state, training, alloc, skill);
+  const breakdown = computeGridTrainingBreakdown(state, alloc);
+  let weeklyHours = 0;
+  if (isFocused) {
+    weeklyHours += breakdown.effectiveSkillDevHours / Math.max(1, training.focus.length);
+  }
+  if (hasActiveCourse) {
+    weeklyHours += Math.max(breakdown.courseHours, 4);
+  }
+  weeklyHours += breakdown.hobbyTagHours[skill] ?? 0;
+
+  const baseRate = SKILL_TIERS[(hasActiveCourse && effectiveTier < 2 ? 2 : effectiveTier) as SkillTier].baseRatePerHour;
+  const curveMult = computeIntraLevelCurve(skState);
+  const courseBoost = hasActiveCourse ? SKILL_LEVEL_CONFIG.courseXpMult : 1.0;
+  const estimatedWeeklyGain =
+    atCap || weeklyHours <= 0
+      ? 0
+      : round2(
+          Math.min(
+            SKILL_LEVEL_CONFIG.maxSkillXpPerWeek,
+            weeklyHours *
+              baseRate *
+              aptitudeMult *
+              traitMult *
+              talentMult *
+              ageMult *
+              stressMult *
+              courseBoost *
+              curveMult
+          )
+        );
 
   return {
     skillId: skill,
-    level,
-    tier,
-    tierLabelTh: UI_TEXT.SKILL_TRAINING.tierNames[tier] ?? tierDef.labelTh,
-    effectiveCap,
+    level: skState.level,
+    levelNum: skState.level,
+    levelNameTh: SKILL_LEVEL_CONFIG.namesTh[skState.level] ?? 'เพิ่งเริ่ม',
+    unlockedTier: effectiveTier,
+    maxLevelForTier: maxLevel,
+    tier: effectiveTier,
+    tierLabelTh: SKILL_TIERS[effectiveTier].labelTh,
+    effectiveCap: getEffectiveSkillCap(state, skill),
     atCap,
-    xpProgressPct: Math.round(clamp((training.xp[skill] ?? 0) * 100, 0, 99)),
+    xp: skState.xp,
+    xpThreshold: threshold,
+    xpProgressPct: xpPct,
     isFocused,
     hasActiveCourse,
     tier2Unlocked: tier2,
     tier3Unlocked: tier3,
+    unlockedViaChildEvent: Boolean(skState.unlockedViaChildEvent),
+    certificates: skState.certificates ?? [],
     aptitudeMult,
     traitMult,
+    talentMult,
     ageMult,
-    energyMult,
-    estimatedWeeklyGain: gainEval.rawGain,
+    stressMult,
+    estimatedWeeklyGain,
     unlockHintTh,
     slowReasonsTh,
   };
 }
 
-function computeGridTrainingBreakdown(
+export function computeGridTrainingBreakdown(
   state: GameState,
   alloc: TimeAllocation
 ): {
@@ -316,68 +614,67 @@ function computeGridTrainingBreakdown(
   courseHours: number;
   fieldPracticeHours: number;
   readReviewHours: number;
+  workoutHours: number;
+  hobbyTagHours: Record<SkillKey, number>;
   effectiveSkillDevHours: number;
 } {
   const grid = state.planner?.grid;
-  if (!grid) {
-    return {
-      selfStudyHours: alloc.selfDev,
-      courseHours: alloc.selfDev,
-      fieldPracticeHours: 0,
-      readReviewHours: 0,
-      effectiveSkillDevHours: alloc.selfDev,
-    };
-  }
-
+  const hobbyTagHours = zeroSkillRecord();
   let selfStudyHours = 0;
   let courseHours = 0;
   let fieldPracticeHours = 0;
   let readReviewHours = 0;
+  let workoutHours = 0;
   let totalGridSelfDev = 0;
-  const jobId = state.economy.jobId || 'unemployed';
-  const job = JOBS[jobId];
-  const age = state.character.ageYears;
 
-  const isCellRoleLocked = (dayType: 'weekday' | 'weekend', slot: 'morning' | 'afternoon' | 'evening' | 'night') => {
-    if (age < 6 || jobId === 'infant') return true;
-    if (dayType !== 'weekday') return false;
-    if (jobId === 'student') return slot === 'morning' || slot === 'afternoon';
-    if (!job || job.shift === 'none') return false;
-    if (job.shift === 'day') return slot === 'morning' || slot === 'afternoon';
-    if (job.shift === 'day_long') return slot === 'morning' || slot === 'afternoon' || slot === 'evening';
-    if (job.shift === 'split') return slot === 'afternoon' || slot === 'evening';
-    if (job.shift === 'flex') return jobId === 'food_rider' ? (slot === 'afternoon' || slot === 'evening') : (slot === 'morning' || slot === 'afternoon');
-    if (job.shift === 'night') return age >= 18 ? (slot === 'evening' || slot === 'night') : (slot === 'afternoon' || slot === 'evening');
-    return false;
-  };
+  if (grid) {
+    for (const dt of ALL_DAY_TYPES) {
+      for (const slot of ALL_SLOTS) {
+        const actId = grid?.[dt]?.[slot];
+        if (!actId) continue;
+        const act = ACTIVITIES_BY_ID.get(actId);
+        if (!act) continue;
+        const hrs = (SLOT_HOURS[slot] ?? 4) * DAY_TYPE_WEIGHTS[dt];
 
-  for (const dayType of ALL_DAY_TYPES) {
-    const weight = DAY_TYPE_WEIGHTS[dayType];
-    for (const slot of ALL_SLOTS) {
-      if (isCellRoleLocked(dayType, slot)) continue;
-      const actId = grid[dayType]?.[slot];
-      if (!actId) continue;
-      const def = ACTIVITIES_BY_ID.get(actId);
-      if (!def || def.timeCategory !== 'selfDev') continue;
-      const hrs =
-        (slot === 'night'
-          ? SLOT_HOURS.night + NIGHT_AWAKE_SLEEP_PENALTY_HOURS
-          : SLOT_HOURS[slot]) * weight;
-      totalGridSelfDev += hrs;
-      if (actId === 'self_study') selfStudyHours += hrs;
-      else if (actId === 'attend_course') courseHours += hrs;
-      else if (actId === 'field_practice') fieldPracticeHours += hrs;
-      else if (actId === 'read_review') readReviewHours += hrs;
+        if (act.timeCategory === 'selfDev') {
+          totalGridSelfDev += hrs;
+        }
+
+        if (actId === 'attend_course') courseHours += hrs;
+        else if (actId === 'field_practice') fieldPracticeHours += hrs;
+        else if (actId === 'read_review') readReviewHours += hrs;
+        else if (act.timeCategory === 'selfDev') selfStudyHours += hrs;
+
+        if (actId === 'workout' || act.tags?.includes('sport') || act.tags?.includes('fitness')) {
+          workoutHours += hrs;
+        }
+
+        const customTag =
+          actId === 'hobby_leisure' ||
+          actId === 'attend_course' ||
+          actId === 'university_club' ||
+          actId === 'self_study'
+            ? state.planner?.activitySkillTags?.[actId]
+            : undefined;
+        const tagsToApply = customTag ? [customTag] : act.defaultSkillTags ?? [];
+        for (const tagId of tagsToApply) {
+          const skills = getSkillsForActivityTag(tagId);
+          for (const sk of skills) {
+            hobbyTagHours[sk] = (hobbyTagHours[sk] ?? 0) + hrs * 0.35;
+          }
+        }
+      }
     }
   }
 
-  // Respect direct state.timeAllocation overrides in legacy/unit tests if alloc diverges from planner grid
   if (Math.abs(alloc.selfDev - totalGridSelfDev) > 0.5) {
     return {
       selfStudyHours: alloc.selfDev,
       courseHours: alloc.selfDev,
       fieldPracticeHours: 0,
       readReviewHours: 0,
+      workoutHours,
+      hobbyTagHours,
       effectiveSkillDevHours: alloc.selfDev,
     };
   }
@@ -387,137 +684,94 @@ function computeGridTrainingBreakdown(
     courseHours,
     fieldPracticeHours,
     readReviewHours,
-    effectiveSkillDevHours:
-      selfStudyHours + courseHours + fieldPracticeHours + readReviewHours * 0.55,
+    workoutHours,
+    hobbyTagHours,
+    effectiveSkillDevHours: selfStudyHours + courseHours + fieldPracticeHours + readReviewHours * 0.55,
   };
 }
 
-function computeWeeklySkillGainForOne(
-  state: GameState,
-  training: SkillTrainingState,
-  alloc: TimeAllocation,
-  skill: SkillKey
-): { rawGain: number; practicedHours: number } {
-  if (state.character.ageYears < SKILL_TRAINING_CONFIG.minTrainingAge || !state.character.isAlive) {
-    return { rawGain: 0, practicedHours: 0 };
+function advanceSkillLevelAndXp(
+  cur: SkillLevelState,
+  xpDelta: number,
+  maxLvl: SkillLevelNum
+): SkillLevelState {
+  let nextXp = round2(Math.max(0, cur.xp + xpDelta));
+  let nextLvl = cur.level;
+
+  while (nextLvl < 5) {
+    const threshold = SKILL_LEVEL_CONFIG.xpThresholds[nextLvl] ?? 100;
+    if (nextXp < threshold) break;
+    if (nextLvl < maxLvl) {
+      nextXp = round2(nextXp - threshold);
+      nextLvl = (nextLvl + 1) as SkillLevelNum;
+    } else {
+      // Carryover XP stops at current tier cap threshold
+      nextXp = threshold;
+      break;
+    }
   }
 
-  const level = state.character.skills[skill] ?? 0;
-  const effectiveCap = getEffectiveSkillCap(state, skill);
-  if (level >= effectiveCap) {
-    return { rawGain: 0, practicedHours: 0 };
+  if (nextLvl >= 5) {
+    nextLvl = 5;
+    nextXp = 0;
   }
-
-  const tier = getSkillTier(level);
-  const tierDef = SKILL_TIERS[tier];
-  const tier2 = isTier2Unlocked(state, skill);
-  const tier3 = isTier3Unlocked(state, skill);
-  const job = JOBS[state.economy.jobId];
-  const breakdown = computeGridTrainingBreakdown(state, alloc);
-
-  const isFocused = training.focus.includes(skill);
-  const activeCourseForThis =
-    training.course?.skillId === skill && (training.course?.weeksLeft ?? 0) > 0;
-  const focusCount = Math.max(1, training.focus.length);
-
-  let selfDevHoursForSkill = 0;
-  if (isFocused) {
-    selfDevHoursForSkill = breakdown.effectiveSkillDevHours / focusCount;
-  } else if (activeCourseForThis) {
-    selfDevHoursForSkill = breakdown.effectiveSkillDevHours / (training.focus.length + 1);
-  }
-
-  let effectiveHours = 0;
-  if (tier === 1) {
-    effectiveHours = selfDevHoursForSkill;
-    if (skill === 'socializing' && alloc.social > 0) {
-      effectiveHours += alloc.social * 0.35;
-    }
-    if (skill === 'academic' && state.economy.jobId === 'student' && alloc.workOrStudy > 0) {
-      effectiveHours += alloc.workOrStudy * 0.25;
-    }
-  } else if (tier === 2) {
-    if (!tier2) {
-      return { rawGain: 0, practicedHours: selfDevHoursForSkill };
-    }
-    if (activeCourseForThis) {
-      const courseTotalHours = Math.max(breakdown.courseHours, breakdown.effectiveSkillDevHours);
-      const minScale = Math.min(
-        1,
-        courseTotalHours / SKILL_TRAINING_CONFIG.courseMinSelfDevHoursPerWeek
-      );
-      effectiveHours = Math.max(selfDevHoursForSkill, courseTotalHours * 0.5) * minScale;
-    } else if (skill === 'academic' && state.economy.jobId === 'student') {
-      effectiveHours = selfDevHoursForSkill + alloc.workOrStudy * 0.22;
-    }
-  } else {
-    // Tier 3 (60-100): real-world usage hours + grid field_practice slot
-    if (!tier3) {
-      return { rawGain: 0, practicedHours: selfDevHoursForSkill };
-    }
-    const relatedCount = Math.max(1, job?.relatedSkills?.length ?? 1);
-    const jobHours =
-      job?.relatedSkills?.includes(skill) && alloc.workOrStudy > 0
-        ? alloc.workOrStudy / relatedCount
-        : 0;
-    const fieldHours =
-      isFocused && breakdown.fieldPracticeHours > 0
-        ? breakdown.fieldPracticeHours / focusCount
-        : 0;
-    const uniHours =
-      skill === 'academic' && state.economy.jobId === 'student' && state.character.ageYears >= 18
-        ? alloc.workOrStudy * 0.35
-        : 0;
-    const socialRealHours =
-      skill === 'socializing' &&
-      (training.socialHighWeeks ?? 0) >= SKILL_TRAINING_CONFIG.socialTier3RequiredWeeks
-        ? alloc.social * 0.5 + (isFocused ? selfDevHoursForSkill * 0.5 : 0)
-        : 0;
-    const financeRealHours =
-      skill === 'finance' &&
-      (state.evidence?.disciplined_saving ?? 0) >= SKILL_TRAINING_CONFIG.financeTier3MinEvidence &&
-      state.economy.cash + state.economy.assetsValue >=
-        SKILL_TRAINING_CONFIG.financeTier3MinWealthCash
-        ? isFocused
-          ? selfDevHoursForSkill
-          : 4
-        : 0;
-    effectiveHours = Math.max(jobHours + fieldHours, uniHours, socialRealHours, financeRealHours);
-  }
-
-  if (effectiveHours <= 0) {
-    return { rawGain: 0, practicedHours: 0 };
-  }
-
-  const progressCurve = computeProgressCurve(level, tier);
-  const aptitudeMult = computeAptitudeMult(state, skill);
-  const traitMult = computeTraitMult(state);
-  const ageMult = computeAgeMult(state);
-  const energyMult = computeEnergyMult(state);
-
-  const rawGain =
-    effectiveHours *
-    tierDef.baseRatePerHour *
-    progressCurve *
-    aptitudeMult *
-    traitMult *
-    ageMult *
-    energyMult;
 
   return {
-    rawGain: round4(Math.min(SKILL_TRAINING_CONFIG.maxSkillGainPerWeek, Math.max(0, rawGain))),
-    practicedHours: effectiveHours,
+    ...cur,
+    level: nextLvl,
+    xp: nextXp,
   };
 }
 
-/**
- * Pure weekly staircase skill progression executed inside pipeline.ts onWeek().
- * Handles:
- *  - Paid Tier 2 course weekly upfront deduction & expiration
- *  - Continuous Tier 3 unlock trackers (e.g. social >= 10h/wk for 8 wks)
- *  - Fractional XP accumulation & tier cap walls (30 / 60 / 100)
- *  - Idle decay (0.02/wk after 12 idle weeks, never below previous tier floor)
- */
+export function grantStoryletSkillPoints(
+  state: GameState,
+  skill: SkillKey,
+  compatDelta: number,
+  _reason?: string
+): GameState {
+  const training = createInitialSkillTrainingState(state.skillTraining);
+  const skillStates: Partial<Record<SkillKey, SkillLevelState>> = { ...(training.skillStates ?? {}) };
+  const curState = skillStates[skill] ?? createInitialSkillLevelState(1, 1, 0, []);
+  const maxLvl = getMaxLevelForSkill(state, skill);
+
+  // Convert legacy 0..100 compat delta proportionally into current level XP (~20 compat = 1 level)
+  const threshold = curState.level < 5 ? SKILL_LEVEL_CONFIG.xpThresholds[curState.level] ?? 100 : 1500;
+  const xpDelta = (compatDelta / 20) * threshold;
+
+  const updated = advanceSkillLevelAndXp(curState, xpDelta, maxLvl);
+  skillStates[skill] = updated;
+
+  const nextSkills = { ...state.character.skills };
+  nextSkills[skill] = convertLevelToCompatScore(updated);
+
+  return {
+    ...state,
+    character: {
+      ...state.character,
+      skills: nextSkills,
+    },
+    skillTraining: {
+      ...training,
+      skillStates: skillStates as Record<SkillKey, SkillLevelState>,
+    },
+  };
+}
+
+export function grantDailyJobSkillXp(state: GameState): GameState {
+  const job = JOBS[state.economy.jobId];
+  if (!job || !job.skillGrowthPerDay || state.character.ageYears < 15) return state;
+
+  let next = state;
+  for (const [sk, delta] of Object.entries(job.skillGrowthPerDay)) {
+    const sKey = sk as SkillKey;
+    const dailyDelta = (delta ?? 0) * 0.15;
+    if (dailyDelta !== 0) {
+      next = grantStoryletSkillPoints(next, sKey, dailyDelta, 'การทำงานประจำ');
+    }
+  }
+  return next;
+}
+
 export function applyWeeklySkillTraining(state: GameState, recordLogs = true): GameState {
   if (!state.character.isAlive) return state;
 
@@ -525,197 +779,179 @@ export function applyWeeklySkillTraining(state: GameState, recordLogs = true): G
   const training = createInitialSkillTrainingState(next.skillTraining);
   const stageId = getLifeSubStageId(next.character.ageYears);
   const alloc: TimeAllocation = next.timeAllocation ?? DEFAULT_TIME_ALLOC_BY_STAGE[stageId];
-  const currentWeek = Math.floor(next.date.totalDays / 7);
+  const breakdown = computeGridTrainingBreakdown(next, alloc);
+  const skillStates: Partial<Record<SkillKey, SkillLevelState>> = { ...(training.skillStates ?? {}) };
 
-  // 1. Update continuous Tier 3 activity trackers
-  const prevSocialWeeks = training.socialHighWeeks ?? 0;
+  // 1. Social high weeks tracker
   if (alloc.social >= SKILL_TRAINING_CONFIG.socialTier3RequiredHoursPerWeek) {
-    training.socialHighWeeks = prevSocialWeeks + 1;
-  } else if (prevSocialWeeks < SKILL_TRAINING_CONFIG.socialTier3RequiredWeeks) {
+    training.socialHighWeeks = (training.socialHighWeeks ?? 0) + 1;
+  } else if ((training.socialHighWeeks ?? 0) < SKILL_TRAINING_CONFIG.socialTier3RequiredWeeks) {
     training.socialHighWeeks = 0;
   }
 
-  // 2. Active Tier 2 paid course weekly upkeep (deduct weekly fee upfront, cancel if insufficient cash — no refund)
+  // 2. Active Course processing (8 weeks fixed, 500/week, min 6h/week, max 2 missed)
+  let courseFinishedThisWeek = false;
+  let courseFailedThisWeek = false;
+  let activeCourseSkill: SkillKey | null = null;
+
   if (training.course && training.course.weeksLeft > 0) {
-    const courseSkillLabel = SKILL_LABELS[training.course.skillId]?.label ?? training.course.skillId;
-    if (next.economy.cash >= training.course.feePerWeek) {
+    activeCourseSkill = training.course.skillId;
+    const courseFee = training.course.feePerWeek ?? SKILL_TRAINING_CONFIG.courseFeePerWeek;
+    const courseSkillLabel = SKILL_LABELS[activeCourseSkill]?.label ?? activeCourseSkill;
+
+    if (next.economy.cash >= courseFee) {
       next = applyEffects(
         next,
         [
           {
             type: 'AddMoney',
-            amount: -training.course.feePerWeek,
+            amount: -courseFee,
             category: 'living',
             reason: `ค่าเรียนคอร์ส${courseSkillLabel}รายสัปดาห์`,
           },
         ],
         recordLogs
       );
-    } else {
-      training.course = null;
-      if (recordLogs) {
-        next = appendTimeline(next, {
-          category: 'life',
-          title: `คอร์ส${courseSkillLabel}หยุดลงกลางคัน`,
-          description: 'เงินสดไม่พอจ่ายค่าเรียนรายสัปดาห์ คอร์สจึงสิ้นสุดลงโดยไม่มีการคืนเงิน',
-        });
+
+      // Course attendance counts total self-dev hours vs min 6h/week
+      const weeklyHours = Math.max(alloc.selfDev, breakdown.effectiveSkillDevHours);
+      if (weeklyHours < SKILL_TRAINING_CONFIG.courseMinSelfDevHoursPerWeek) {
+        training.course.missedWeeks = (training.course.missedWeeks ?? 0) + 1;
       }
+
+      if ((training.course.missedWeeks ?? 0) > SKILL_LEVEL_CONFIG.courseMaxMissedWeeks) {
+        courseFailedThisWeek = true;
+        training.course = null;
+      } else {
+        training.course.weeksLeft -= 1;
+        if (training.course.weeksLeft <= 0) {
+          courseFinishedThisWeek = true;
+        }
+      }
+    } else {
+      courseFailedThisWeek = true;
+      training.course = null;
     }
   }
 
-  // Re-attach updated training before computing gains
-  next = {
-    ...next,
-    skillTraining: training,
-  };
+  // 3. Weekly XP calculation across skills with per-skill (6) & total weekly (10) caps
+  const stressMult = computeStressMult(next);
+  const ageMult = computeAgeMult(next);
+  const traitMult = computeTraitMult(next);
 
-  if (next.character.ageYears < SKILL_TRAINING_CONFIG.minTrainingAge) {
-    return next;
-  }
-
-  // 3. Compute raw weekly gains across all 8 skills, capping each <= 3 and total <= 6
-  const rawGains: Record<SkillKey, number> = zeroSkillRecord();
-  const practicedHoursMap: Record<SkillKey, number> = zeroSkillRecord();
+  const pendingGains: Array<{ sk: SkillKey; gainedXp: number; maxLvl: SkillLevelNum }> = [];
   let totalRawGain = 0;
 
-  for (const sKey of ALL_SKILL_KEYS) {
-    const res = computeWeeklySkillGainForOne(next, training, alloc, sKey);
-    rawGains[sKey] = res.rawGain;
-    practicedHoursMap[sKey] = res.practicedHours;
-    totalRawGain += res.rawGain;
+  for (const sk of ALL_SKILL_KEYS) {
+    if (!isSkillVisible(next, sk)) continue;
+    const cur = skillStates[sk] ?? createInitialSkillLevelState(1, 1, 0, []);
+    const isFocused = training.focus.includes(sk);
+    const hasCourse = activeCourseSkill === sk;
+    const maxLvl = getMaxLevelForSkill(next, sk);
+
+    // Sync permanent unlockedTier upward if situational unlocks (school track / job / streak) applied
+    const situationalTier: SkillTierId = isTier3Unlocked(next, sk) ? 3 : isTier2Unlocked(next, sk) ? 2 : 1;
+    const effectiveTier = Math.max(cur.unlockedTier, situationalTier) as SkillTierId;
+    if (effectiveTier > cur.unlockedTier) {
+      skillStates[sk] = { ...cur, unlockedTier: effectiveTier };
+    }
+
+    let weeklyHours = 0;
+    if (isFocused) {
+      weeklyHours += breakdown.effectiveSkillDevHours / Math.max(1, training.focus.length);
+    }
+    if (hasCourse) {
+      weeklyHours += Math.max(breakdown.courseHours, 4);
+    }
+    weeklyHours += breakdown.hobbyTagHours[sk] ?? 0;
+
+    if (weeklyHours <= 0) continue;
+
+    const baseRate = SKILL_TIERS[(hasCourse && effectiveTier < 2 ? 2 : effectiveTier) as SkillTier].baseRatePerHour;
+    const aptitudeMult = computeAptitudeMult(next, sk);
+    const talentMult = computeCombinedSkillMultiplier(next.character, sk);
+    const courseBoost = hasCourse ? SKILL_LEVEL_CONFIG.courseXpMult : 1.0;
+    const curveMult = computeIntraLevelCurve(cur);
+
+    const perSkillCap = SKILL_LEVEL_CONFIG.maxSkillXpPerWeek;
+    const gainedXp = round2(
+      Math.min(
+        perSkillCap,
+        weeklyHours * baseRate * aptitudeMult * traitMult * talentMult * ageMult * stressMult * courseBoost * curveMult
+      )
+    );
+    if (gainedXp > 0) {
+      pendingGains.push({ sk, gainedXp, maxLvl });
+      totalRawGain += gainedXp;
+    }
   }
 
   const totalScale =
-    totalRawGain > SKILL_TRAINING_CONFIG.maxTotalSkillGainPerWeek
-      ? SKILL_TRAINING_CONFIG.maxTotalSkillGainPerWeek / totalRawGain
+    totalRawGain > SKILL_LEVEL_CONFIG.maxTotalSkillXpPerWeek && totalRawGain > 0
+      ? SKILL_LEVEL_CONFIG.maxTotalSkillXpPerWeek / totalRawGain
       : 1;
 
-  // 4. Apply fractional XP accumulation + wall caps + 12-week idle decay
+  for (const { sk, gainedXp, maxLvl } of pendingGains) {
+    const cur = skillStates[sk] ?? createInitialSkillLevelState(1, 1, 0, []);
+    const scaledXp = round2(gainedXp * totalScale);
+    skillStates[sk] = advanceSkillLevelAndXp(cur, scaledXp, maxLvl);
+  }
+
+  // Handle course completion rewards
+  if (courseFinishedThisWeek && activeCourseSkill) {
+    const cur = skillStates[activeCourseSkill] ?? createInitialSkillLevelState(1, 1, 0, []);
+    const certName = `ใบประกาศนียบัตร: ${SKILL_LABELS[activeCourseSkill]?.label ?? activeCourseSkill} (8 สัปดาห์)`;
+    const updatedCerts = cur.certificates.includes(certName) ? cur.certificates : [...cur.certificates, certName];
+    const unlockedTier = Math.max(cur.unlockedTier, 2) as SkillTierId;
+    const upgradedCur = {
+      ...cur,
+      unlockedTier,
+      certificates: updatedCerts,
+    };
+    // Re-evaluate level up if carryover XP was waiting at Lv.2/Lv.3 threshold
+    const newMaxLvl = unlockedTier === 3 ? 5 : 4;
+    skillStates[activeCourseSkill] = advanceSkillLevelAndXp(upgradedCur, 0, newMaxLvl);
+    training.course = null;
+
+    next = appendTimeline(next, {
+      category: 'milestone',
+      tier: 'T2',
+      title: `เรียนจบคอร์ส: ${SKILL_LABELS[activeCourseSkill]?.label ?? activeCourseSkill}`,
+      description: 'สำเร็จหลักสูตร 8 สัปดาห์ ปลดล็อกทักษะสู่ระดับขั้นที่ 2 (ขั้นคอร์ส Lv.4) พร้อมรับใบประกาศนียบัตร',
+    });
+
+    next = pushLifeHistory(next, {
+      id: `course_grad_${activeCourseSkill}_${next.date.totalDays}`,
+      kind: 'course_completed',
+      titleTh: `จบคอร์ส: ${SKILL_LABELS[activeCourseSkill]?.label ?? activeCourseSkill}`,
+      detailTh: certName,
+    });
+  } else if (courseFailedThisWeek && activeCourseSkill) {
+    next = appendTimeline(next, {
+      category: 'life',
+      tier: 'T1',
+      title: `คอร์ส${SKILL_LABELS[activeCourseSkill]?.label ?? activeCourseSkill}ยุติลง`,
+      description: 'ขาดเรียนเกิน 2 สัปดาห์ หรือเงินสดไม่พอจ่ายค่าเรียน คอร์สจึงสิ้นสุดลงโดยไม่ได้รับใบประกาศ',
+    });
+  }
+
+  // Sync compat scores into character.skills
   const nextSkills = { ...next.character.skills };
-  const nextStatLogs = [...next.statLogs];
-  const capNotices: string[] = [];
-
-  for (const sKey of ALL_SKILL_KEYS) {
-    const curLevel = nextSkills[sKey] ?? 0;
-    const cap = getEffectiveSkillCap(next, sKey);
-    const gain = round4(rawGains[sKey] * totalScale);
-
-    if (practicedHoursMap[sKey] > 0) {
-      training.lastPracticedWeek[sKey] = currentWeek;
-    }
-
-    if (gain > 0 && curLevel < cap) {
-      const nextXpAcc = (training.xp[sKey] ?? 0) + gain;
-      const wholeLevels = Math.floor(nextXpAcc);
-      if (wholeLevels > 0) {
-        const unclamped = curLevel + wholeLevels;
-        const appliedLevel = Math.min(cap, unclamped);
-        const appliedDelta = appliedLevel - curLevel;
-        nextSkills[sKey] = appliedLevel;
-        training.xp[sKey] = appliedLevel >= cap ? 0 : round4(nextXpAcc - wholeLevels);
-
-        if (recordLogs && appliedDelta > 0) {
-          nextStatLogs.push({
-            id: `sl_${next.date.totalDays}_${nextStatLogs.length + 1}`,
-            totalDay: next.date.totalDays,
-            dateLabel: formatShortThaiDate(next.date),
-            target: `skill:${sKey}`,
-            delta: appliedDelta,
-            newValue: appliedLevel,
-            reason: `พัฒนาทักษะ${SKILL_LABELS[sKey].label}ประจำสัปดาห์`,
-          });
-        }
-
-        if (appliedLevel >= cap && cap < 100 && training.lastLoggedCap?.[sKey] !== cap) {
-          training.lastLoggedCap = {
-            ...(training.lastLoggedCap ?? {}),
-            [sKey]: cap as 30 | 60,
-          };
-          const rule = SKILL_UNLOCK_RULES[sKey];
-          const hint = cap === 30 ? rule.tier2HintTh : rule.tier3HintTh;
-          capNotices.push(`ทักษะ${SKILL_LABELS[sKey].label}แตะเพดาน ${cap}: ${hint}`);
-        }
-      } else {
-        training.xp[sKey] = round4(nextXpAcc);
-      }
-    } else if (curLevel >= cap && cap < 100) {
-      training.xp[sKey] = 0;
-      if (
-        (training.focus.includes(sKey) || training.course?.skillId === sKey) &&
-        training.lastLoggedCap?.[sKey] !== cap
-      ) {
-        training.lastLoggedCap = {
-          ...(training.lastLoggedCap ?? {}),
-          [sKey]: cap as 30 | 60,
-        };
-        const rule = SKILL_UNLOCK_RULES[sKey];
-        const hint = cap === 30 ? rule.tier2HintTh : rule.tier3HintTh;
-        capNotices.push(`ทักษะ${SKILL_LABELS[sKey].label}ติดเพดาน ${cap}: ${hint}`);
-      }
-    } else if (
-      practicedHoursMap[sKey] <= 0 &&
-      currentWeek - (training.lastPracticedWeek[sKey] ?? currentWeek) >
-        SKILL_TRAINING_CONFIG.decayIdleWeeks
-    ) {
-      // Slow idle decay, never below previous tier floor (0, 30, or 60)
-      const tierFloor = curLevel >= 60 ? 60 : curLevel >= 30 ? 30 : 0;
-      if (training.xp[sKey] >= SKILL_TRAINING_CONFIG.decayPerWeek) {
-        training.xp[sKey] = round4(training.xp[sKey] - SKILL_TRAINING_CONFIG.decayPerWeek);
-      } else if (curLevel > tierFloor) {
-        nextSkills[sKey] = Math.max(
-          tierFloor,
-          round2(curLevel - SKILL_TRAINING_CONFIG.decayPerWeek)
-        );
-      }
-    }
+  for (const sk of ALL_SKILL_KEYS) {
+    nextSkills[sk] = convertLevelToCompatScore(skillStates[sk]);
   }
 
-  // 5. Decrement course week counter AFTER weekly training gain has been applied
-  let completedCourseLabel: string | null = null;
-  if (training.course && training.course.weeksLeft > 0) {
-    const nextWeeksLeft = training.course.weeksLeft - 1;
-    if (nextWeeksLeft <= 0) {
-      completedCourseLabel = SKILL_LABELS[training.course.skillId]?.label ?? training.course.skillId;
-      training.course = null;
-    } else {
-      training.course = {
-        ...training.course,
-        weeksLeft: nextWeeksLeft,
-      };
-    }
-  }
-
-  if (nextStatLogs.length > 400) {
-    nextStatLogs.splice(0, nextStatLogs.length - 400);
-  }
-
-  next = {
+  return {
     ...next,
     character: {
       ...next.character,
       skills: nextSkills,
     },
-    skillTraining: training,
-    statLogs: nextStatLogs,
+    skillTraining: {
+      ...training,
+      skillStates: skillStates as Record<SkillKey, SkillLevelState>,
+    },
   };
-
-  if (recordLogs && completedCourseLabel) {
-    next = appendTimeline(next, {
-      category: 'life',
-      title: `เรียนจบคอร์ส${completedCourseLabel}`,
-      description: 'เรียนครบระยะเวลาคอร์สแล้ว หากต้องการปลดล็อกระดับ 60–100 ต้องฝึกในสนามจริงหรือสายงานที่เกี่ยวข้อง',
-    });
-  }
-
-  if (recordLogs && capNotices.length > 0) {
-    next = appendTimeline(next, {
-      category: 'life',
-      title: 'ทักษะแตะเพดานขั้น',
-      description: capNotices.join(' · '),
-    });
-  }
-
-  return next;
 }
 
 function round4(val: number): number {

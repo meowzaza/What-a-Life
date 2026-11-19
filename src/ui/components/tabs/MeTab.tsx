@@ -1,5 +1,19 @@
 import { useState } from 'react';
 import {
+  HIGH_SCHOOL_TRACKS,
+  READINESS_META,
+  SCHOOL_TIERS,
+  SECOND_CHANCE_PROGRAMS,
+  VOCATIONAL_BRANCHES,
+} from '../../../data/education';
+import { CORE_SKILL_IDS, DISCOVERED_SKILL_IDS } from '../../../data/skills';
+import {
+  TALENT_DEFS_BY_ID,
+  TALENT_MAX_ACTIVE_SLOTS,
+  TALENT_TIER_LABELS_TH,
+  TALENT_VAULT_MAX_SLOTS,
+} from '../../../data/talents';
+import {
   EDUCATION_LABELS,
   FAMILY_STRUCTURES,
   PARENT_EDUCATIONS,
@@ -17,15 +31,16 @@ import {
   TRAITS_BY_ID,
   TURNING_POINT_DEFS,
 } from '../../../data/traits';
+import { UI_TEXT } from '../../../data/uiText';
 import { describeAppearanceTraits, evaluateAppearanceImpact } from '../../../engine/appearance';
 import { getAgeEmploymentRules, getLifeStageForAge } from '../../../engine/lifeStage';
-import { getSkillGrowthDetails } from '../../../engine/skillTraining';
+import { getSkillGrowthDetails, isSkillVisible } from '../../../engine/skillTraining';
+import { canSwapTalentSlots, getTalentHintText } from '../../../engine/talents';
 import type {
   GameState,
   PersonalityAxisKey,
   PlayerAction,
   ReputationGroupKey,
-  SkillKey,
   TemperamentDimensions,
 } from '../../../engine/types';
 import { PixelIcon } from '../../art/PixelIcons';
@@ -34,20 +49,10 @@ interface MeTabProps {
   state: GameState;
   onSelectExplain: (key: string) => void;
   onDispatch?: (action: PlayerAction) => void;
+  onNavigateJournal?: () => void;
 }
 
 type MeSubTab = 'stats' | 'stage_traits' | 'backstory';
-
-const SKILL_KEYS: SkillKey[] = [
-  'english',
-  'sales',
-  'finance',
-  'tech',
-  'craft',
-  'cooking',
-  'socializing',
-  'academic',
-];
 
 const TEMP_DIM_META: Array<{ key: keyof TemperamentDimensions; labelTh: string; color: string }> = [
   { key: 'energy', labelTh: 'พลังงานพื้นฐาน', color: '#6EE7B7' },
@@ -65,12 +70,13 @@ const REP_LABELS: Array<{ key: ReputationGroupKey; labelTh: string }> = [
   { key: 'community', labelTh: 'ชุมชนรอบตัว' },
 ];
 
-export function MeTab({ state, onSelectExplain, onDispatch }: MeTabProps) {
+export function MeTab({ state, onSelectExplain, onDispatch, onNavigateJournal }: MeTabProps) {
   const { character } = state;
-  const { rawStats, resources, skills, background, backstory } = character;
+  const { rawStats, resources, background, backstory } = character;
   const [activeSubTab, setActiveSubTab] = useState<MeSubTab>('stats');
   const [selectedTpKind, setSelectedTpKind] = useState<string>(TURNING_POINT_DEFS[0].kind);
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+  const [selectedActiveSlotIdx, setSelectedActiveSlotIdx] = useState<number>(0);
 
   const toggleSection = (id: string) => {
     setCollapsedSections((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -105,6 +111,20 @@ export function MeTab({ state, onSelectExplain, onDispatch }: MeTabProps) {
   const innerTension = character.innerTension ?? 0;
   const repView = character.reputationView ?? { family: 50, friends: 50, work: 50, community: 50 };
   const focusSkills = state.skillTraining?.focus ?? [];
+  const visibleDiscoveredSkills = DISCOVERED_SKILL_IDS.filter((sk) => isSkillVisible(state, sk));
+  const activeTalentEntries = (character.talents ?? [])
+    .map((talent, index) => ({ talent, index }))
+    .filter(({ talent }) => talent.revealed);
+  const effectiveActiveSlotIdx = activeTalentEntries.some((e) => e.index === selectedActiveSlotIdx)
+    ? selectedActiveSlotIdx
+    : (activeTalentEntries[0]?.index ?? 0);
+  const vaultTalents = character.talentVault ?? [];
+  const unrevealedTalents = (character.talents ?? []).filter((t) => !t.revealed);
+  const swapCheck = canSwapTalentSlots(state);
+  const visibleLimitations = (character.limitations ?? []).filter(
+    (l) => l.revealed || l.curedAtAge !== undefined
+  );
+  const eduState = character.educationState;
 
   return (
     <div className="space-y-3.5">
@@ -311,14 +331,14 @@ export function MeTab({ state, onSelectExplain, onDispatch }: MeTabProps) {
             )}
           </div>
 
-          {/* ทักษะที่สั่งสม (8 ทักษะ พร้อมเกณฑ์และตัวคูณ) */}
+          {/* ทักษะที่สั่งสม (6 ทักษะพื้นฐาน + ทักษะเฉพาะทางที่ค้นพบแล้ว) */}
           <div className="game-card overflow-hidden">
             <div className="bg-[#FFE58F] dark:bg-[#7A5B1F] border-b-2 border-[#4E3B69] dark:border-[#7662AC] px-3.5 py-2.5 flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 min-w-0">
                 <PixelIcon name="star" size={18} />
                 <div className="min-w-0">
                   <h3 className="font-display font-extrabold text-sm sm:text-base text-[#3D2D52] dark:text-[#FFF6FA]">
-                    ทักษะที่สั่งสม ({SKILL_KEYS.length} ด้าน)
+                    ทักษะที่สั่งสม ({CORE_SKILL_IDS.length + visibleDiscoveredSkills.length} ด้าน)
                   </h3>
                   <p className="text-[11px] text-[#5A3F73] dark:text-[#F4E6F0] truncate">
                     แตะเพื่อดูรายละเอียดการฝึก อัตราเติบโต และเงื่อนไขปลดล็อกขั้นถัดไป
@@ -347,68 +367,445 @@ export function MeTab({ state, onSelectExplain, onDispatch }: MeTabProps) {
             </div>
 
             {!collapsedSections.skills && (
-              <div className="p-3 sm:p-4 px-window-striped">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {SKILL_KEYS.map((key) => {
-                  const val = skills[key];
-                  const meta = SKILL_LABELS[key];
-                  const details = getSkillGrowthDetails(state, key);
-                  const isFocus = focusSkills.includes(key);
+              <div className="p-3 sm:p-4 space-y-3 px-window-striped">
+                <div className="space-y-2">
+                  <div className="text-xs font-display font-bold text-[#3D2D52] dark:text-[#FFF6FA]">
+                    {UI_TEXT.PHASE331.coreSkillsHeading}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {CORE_SKILL_IDS.map((key) => {
+                      const meta = SKILL_LABELS[key];
+                      const details = getSkillGrowthDetails(state, key);
+                      const isFocus = focusSkills.includes(key);
 
-                  return (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => onSelectExplain(`skill:${key}`)}
-                      className="game-btn text-left p-2.5 bg-[#FFFDFB] dark:bg-[#221B3B] space-y-1.5 transition-transform active:translate-y-0.5"
-                    >
-                      <div className="flex items-center justify-between text-xs font-bold gap-1">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <span className="truncate">{meta.label}</span>
-                          {isFocus && (
-                            <span className="px-1 py-0.2 bg-[#D6FAEA] text-[#165940] border border-[#4E3B69]/40 text-[9px] font-extrabold shrink-0">
-                              โฟกัส
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => onSelectExplain(`skill:${key}`)}
+                          className="game-btn text-left p-2.5 bg-[#FFFDFB] dark:bg-[#221B3B] space-y-1.5 transition-transform active:translate-y-0.5"
+                        >
+                          <div className="flex items-center justify-between text-xs font-bold gap-1">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="truncate">{meta.label}</span>
+                              {isFocus && (
+                                <span className="px-1 py-0.2 bg-[#D6FAEA] text-[#165940] border border-[#4E3B69]/40 text-[9px] font-extrabold shrink-0">
+                                  โฟกัส
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <span className="font-num tabular-nums text-[#BD346B] dark:text-[#FFB8D4]">
+                                Lv.{details.levelNum}
+                              </span>
+                              <span className="text-[10px] text-[#76658D] dark:text-[#CBBFE3]">
+                                / สูงสุด Lv.{details.maxLevelForTier}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="px-progress-track h-2 bg-[#EFF6FF] dark:bg-[#352B59]">
+                            <div
+                              className="px-progress-fill h-full bg-[#93C5FD]"
+                              style={{
+                                width: `${details.xpProgressPct}%`,
+                              }}
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-between text-[10px] text-[#76658D] dark:text-[#CBBFE3]">
+                            <span className="truncate">
+                              {details.levelNameTh} ·{' '}
+                              {details.atCap
+                                ? 'ติดเพดานขั้น'
+                                : details.xpThreshold > 0
+                                  ? `XP ${Math.round(details.xp)}/${details.xpThreshold}`
+                                  : details.tierLabelTh}
                             </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <span className="font-num tabular-nums text-[#BD346B] dark:text-[#FFB8D4]">
-                            {val.toFixed(1)}
-                          </span>
-                          <span className="text-[10px] text-[#76658D] dark:text-[#CBBFE3]">
-                            /{details.effectiveCap}
-                          </span>
-                        </div>
-                      </div>
+                            <span className="text-[#2559B8] dark:text-[#B8D8FE] font-semibold shrink-0">
+                              ดูรายละเอียด →
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
 
-                      <div className="px-progress-track h-2 bg-[#EFF6FF] dark:bg-[#352B59]">
-                        <div
-                          className="px-progress-fill h-full bg-[#93C5FD]"
-                          style={{
-                            width: `${Math.max(0, Math.min(100, (val / details.effectiveCap) * 100))}%`,
-                          }}
-                        />
-                      </div>
+                <div className="space-y-2 pt-2 border-t-2 border-dashed border-[#4E3B69]/20 dark:border-white/15">
+                  <div className="text-xs font-display font-bold text-[#3D2D52] dark:text-[#FFF6FA]">
+                    {UI_TEXT.PHASE331.discoveredSkillsHeading} ({visibleDiscoveredSkills.length})
+                  </div>
+                  {visibleDiscoveredSkills.length === 0 ? (
+                    <div className="px-inset p-2.5 bg-[#FFFDFB] dark:bg-[#221B3B] text-[11px] text-[#76658D] dark:text-[#CBBFE3]">
+                      {UI_TEXT.PHASE331.discoveredSkillsEmpty}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {visibleDiscoveredSkills.map((key) => {
+                        const meta = SKILL_LABELS[key];
+                        const details = getSkillGrowthDetails(state, key);
+                        const isFocus = focusSkills.includes(key);
 
-                      <div className="flex items-center justify-between text-[10px] text-[#76658D] dark:text-[#CBBFE3]">
-                        <span className="truncate">
-                          {details.atCap
-                            ? 'ติดเพดานขั้น'
-                            : details.estimatedWeeklyGain > 0
-                              ? `+${details.estimatedWeeklyGain.toFixed(2)}/สัปดาห์`
-                              : `ขั้น ${details.tierLabelTh}`}
-                        </span>
-                        <span className="text-[#2559B8] dark:text-[#B8D8FE] font-semibold shrink-0">
-                          ดูรายละเอียด →
-                        </span>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => onSelectExplain(`skill:${key}`)}
+                            className="game-btn text-left p-2.5 bg-[#FFFDFB] dark:bg-[#221B3B] space-y-1.5 transition-transform active:translate-y-0.5"
+                          >
+                            <div className="flex items-center justify-between text-xs font-bold gap-1">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className="truncate">{meta.label}</span>
+                                {isFocus && (
+                                  <span className="px-1 py-0.2 bg-[#D6FAEA] text-[#165940] border border-[#4E3B69]/40 text-[9px] font-extrabold shrink-0">
+                                    โฟกัส
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <span className="font-num tabular-nums text-[#BD346B] dark:text-[#FFB8D4]">
+                                  Lv.{details.levelNum}
+                                </span>
+                                <span className="text-[10px] text-[#76658D] dark:text-[#CBBFE3]">
+                                  / สูงสุด Lv.{details.maxLevelForTier}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="px-progress-track h-2 bg-[#FFF0F6] dark:bg-[#352B59]">
+                              <div
+                                className="px-progress-fill h-full bg-[#F9A8D4]"
+                                style={{
+                                  width: `${details.xpProgressPct}%`,
+                                }}
+                              />
+                            </div>
+
+                            <div className="flex items-center justify-between text-[10px] text-[#76658D] dark:text-[#CBBFE3]">
+                              <span className="truncate">
+                                {details.levelNameTh} ·{' '}
+                                {details.atCap
+                                  ? 'ติดเพดานขั้น'
+                                  : details.xpThreshold > 0
+                                    ? `XP ${Math.round(details.xp)}/${details.xpThreshold}`
+                                    : details.tierLabelTh}
+                              </span>
+                              <span className="text-[#2559B8] dark:text-[#B8D8FE] font-semibold shrink-0">
+                                ดูรายละเอียด →
+                              </span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
+
+          {/* พรสวรรค์ (3 ช่องใช้งาน + 5 คลังสำรอง) และข้อจำกัดติดตัว */}
+          <div className="game-card overflow-hidden">
+            <div className="bg-[#D6FAEA] dark:bg-[#1E4D3B] border-b-2 border-[#4E3B69] dark:border-[#7662AC] px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <PixelIcon name="sparkle" size={18} />
+                <div className="min-w-0">
+                  <h3 className="font-display font-extrabold text-sm sm:text-base text-[#3D2D52] dark:text-[#FFF6FA]">
+                    {UI_TEXT.PHASE331.talentsHeading}
+                  </h3>
+                  <p className="text-[11px] text-[#165940] dark:text-[#C8F7E3] truncate">
+                    {UI_TEXT.PHASE331.talentsSubnote}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-3 sm:p-4 space-y-3 px-window-striped text-xs">
+              {vaultTalents.length > 0 && (
+                <div
+                  className={`px-slot p-2 text-[11px] font-semibold ${
+                    swapCheck.allowed
+                      ? 'bg-[#D6FAEA] text-[#165940]'
+                      : 'bg-[#FFF9DB] dark:bg-[#3A3018] text-[#735100] dark:text-[#FFE58F]'
+                  }`}
+                >
+                  {swapCheck.allowed
+                    ? UI_TEXT.PHASE331.talentsSwapReadyNotice
+                    : UI_TEXT.PHASE331.talentsSwapLockedNotice}
+                </div>
+              )}
+
+              {/* Active 3 Slots */}
+              <div className="space-y-1.5">
+                <div className="font-display font-bold text-[#3D2D52] dark:text-[#FFF6FA]">
+                  {UI_TEXT.PHASE331.talentsActiveHeading} ({activeTalentEntries.length}/{TALENT_MAX_ACTIVE_SLOTS})
+                </div>
+                {activeTalentEntries.length === 0 ? (
+                  <div className="px-inset p-2.5 bg-[#FFFDFB] dark:bg-[#221B3B] text-[11px] text-[#76658D] dark:text-[#CBBFE3]">
+                    {UI_TEXT.PHASE331.talentsNoneRevealed}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {activeTalentEntries.map(({ talent: t, index }) => {
+                      const def = TALENT_DEFS_BY_ID.get(t.id);
+                      if (!def) return null;
+                      const isSelectedSwap =
+                        vaultTalents.length > 0 && effectiveActiveSlotIdx === index;
+                      return (
+                        <div
+                          key={`${t.id}-${index}`}
+                          onClick={() => {
+                            if (vaultTalents.length > 0) setSelectedActiveSlotIdx(index);
+                          }}
+                          className={`px-inset p-2.5 space-y-1 ${
+                            isSelectedSwap
+                              ? 'bg-[#FFF9DB] dark:bg-[#3A3018] border-2 border-[#4E3B69]'
+                              : 'bg-[#FFFDFB] dark:bg-[#221B3B]'
+                          } ${vaultTalents.length > 0 ? 'cursor-pointer' : ''}`}
+                        >
+                          <div className="flex items-center justify-between gap-1.5">
+                            <span className="font-display font-bold text-[#3D2D52] dark:text-[#FFF6FA]">
+                              {def.nameTh}
+                            </span>
+                            <span className="px-1.5 py-0.5 bg-[#FFE58F] text-[#3D2D52] border border-[#4E3B69]/50 text-[10px] font-bold shrink-0">
+                              {TALENT_TIER_LABELS_TH[t.tier]}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-[#5A4773] dark:text-[#DDD6FE]">
+                            {def.effectDescTh}
+                          </p>
+                          {isSelectedSwap && (
+                            <div className="text-[10px] font-bold text-[#735100] dark:text-[#FFE58F]">
+                              * เลือกช่องนี้สำหรับสลับเก็บเข้าคลังสำรอง
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Vault (Up to 5 Slots) */}
+              {vaultTalents.length > 0 && (
+                <div className="space-y-1.5 pt-2 border-t border-[#4E3B69]/15 dark:border-white/10">
+                  <div className="font-display font-bold text-[#4C2E99] dark:text-[#DDD2FE]">
+                    {UI_TEXT.PHASE331.talentsVaultHeading} ({vaultTalents.length}/{TALENT_VAULT_MAX_SLOTS})
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {vaultTalents.map((t, vaultIdx) => {
+                      const def = TALENT_DEFS_BY_ID.get(t.id);
+                      if (!def) return null;
+                      return (
+                        <div
+                          key={`vault-${t.id}-${vaultIdx}`}
+                          className="px-inset p-2.5 bg-[#F4F0FF] dark:bg-[#2A2247] space-y-1.5"
+                        >
+                          <div className="flex items-center justify-between gap-1.5">
+                            <span className="font-display font-bold text-[#3D2D52] dark:text-[#FFF6FA]">
+                              {def.nameTh}
+                            </span>
+                            <span className="px-1.5 py-0.5 bg-[#DDD2FE] text-[#3D2D52] border border-[#4E3B69]/50 text-[10px] font-bold shrink-0">
+                              {TALENT_TIER_LABELS_TH[t.tier]}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-[#5A4773] dark:text-[#DDD6FE]">
+                            {def.effectDescTh}
+                          </p>
+                          {onDispatch && (
+                            <button
+                              type="button"
+                              disabled={!character.isAlive || !swapCheck.allowed || activeTalentEntries.length === 0}
+                              onClick={() =>
+                                onDispatch({
+                                  type: 'SWAP_TALENT_SLOT',
+                                  activeIdx: effectiveActiveSlotIdx,
+                                  vaultIdx,
+                                })
+                              }
+                              className="game-btn w-full px-2 py-1 bg-[#D6FAEA] text-[#165940] text-[11px] font-bold disabled:opacity-45"
+                            >
+                              {UI_TEXT.PHASE331.talentsSwapBtn}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {unrevealedTalents.length > 0 && character.ageYears >= 6 && (
+                <div className="space-y-1.5 pt-2 border-t border-[#4E3B69]/15 dark:border-white/10">
+                  <div className="font-display font-bold text-[#663FB5] dark:text-[#DDD2FE]">
+                    {UI_TEXT.PHASE331.talentsUnrevealedHintLabel}
+                  </div>
+                  <div className="space-y-1">
+                    {unrevealedTalents.map((t, idx) => (
+                      <div
+                        key={`${t.id}-hint`}
+                        className="px-inset p-2.5 bg-[#F4F0FF] dark:bg-[#2A2247] text-[11px] text-[#5A4773] dark:text-[#DDD6FE]"
+                      >
+                        {getTalentHintText(t, idx)}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {visibleLimitations.length > 0 && (
+                <div className="space-y-1.5 pt-2 border-t border-[#4E3B69]/15 dark:border-white/10">
+                  <div className="font-display font-bold text-[#BD346B] dark:text-[#FFB8D4]">
+                    {UI_TEXT.PHASE331.limitationsLabel} ({visibleLimitations.length})
+                  </div>
+                  <div className="space-y-1.5">
+                    {visibleLimitations.map((l) => {
+                      const def = TALENT_DEFS_BY_ID.get(l.id);
+                      if (!def) return null;
+                      const isCured = l.curedAtAge !== undefined;
+                      return (
+                        <div
+                          key={l.id}
+                          className="px-inset p-2.5 bg-[#FFFDFB] dark:bg-[#221B3B] space-y-1"
+                        >
+                          <div className="flex items-center justify-between gap-1.5">
+                            <span className="font-display font-bold text-[#3D2D52] dark:text-[#FFF6FA]">
+                              {def.nameTh}
+                            </span>
+                            <span
+                              className={`px-1.5 py-0.5 border border-[#4E3B69]/50 text-[10px] font-bold shrink-0 ${
+                                isCured
+                                  ? 'bg-[#D6FAEA] text-[#165940]'
+                                  : 'bg-[#FFE0EE] text-[#BD346B]'
+                              }`}
+                            >
+                              {isCured ? `แก้ได้แล้ว (อายุ ${l.curedAtAge})` : 'ฝึกแก้ไขได้'}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-[#5A4773] dark:text-[#DDD6FE]">
+                            {isCured
+                              ? 'ความพยายามที่ผ่านมาช่วยให้คุณก้าวข้ามข้อจำกัดนี้แล้ว ไม่มีผลชะลออีกต่อไป'
+                              : def.fixDescTh ?? def.effectDescTh}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* สรุปประวัติการศึกษาและเกรดเฉลี่ย */}
+          {character.ageYears >= 6 && eduState && (
+            <div className="game-card overflow-hidden">
+              <div className="bg-[#B4C3FF] dark:bg-[#4F5DA8] border-b-2 border-[#4E3B69] dark:border-[#7662AC] px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <PixelIcon name="cap" size={18} />
+                  <h3 className="font-display font-extrabold text-sm sm:text-base text-[#3D2D52] dark:text-[#FFF6FA]">
+                    {UI_TEXT.PHASE331.educationSectionTitle}
+                  </h3>
+                </div>
+                <span className="px-2 py-0.5 bg-[#FFFDFB] text-[#2559B8] border border-[#4E3B69] text-[10px] font-bold">
+                  {EDUCATION_LABELS[character.education]}
+                </span>
+              </div>
+
+              <div className="p-3 sm:p-4 px-window-striped text-xs space-y-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <div className="px-slot p-2 bg-[#FFFDFB] dark:bg-[#221B3B]">
+                    <div className="text-[10px] text-[#76658D] dark:text-[#CBBFE3]">
+                      {UI_TEXT.PHASE331.currentSchoolTierLabel}
+                    </div>
+                    <div className="font-bold text-[#3D2D52] dark:text-[#FFF6FA] truncate">
+                      {SCHOOL_TIERS[eduState.schoolTier].labelTh}
+                    </div>
+                  </div>
+                  <div className="px-slot p-2 bg-[#FFFDFB] dark:bg-[#221B3B]">
+                    <div className="text-[10px] text-[#76658D] dark:text-[#CBBFE3]">
+                      {UI_TEXT.PHASE331.currentGpaLabel}
+                    </div>
+                    <div className="font-num font-extrabold text-[#BD346B] dark:text-[#FFB8D4]">
+                      {eduState.currentGpa.toFixed(2)}
+                    </div>
+                  </div>
+                  <div className="px-slot p-2 bg-[#FFFDFB] dark:bg-[#221B3B]">
+                    <div className="text-[10px] text-[#76658D] dark:text-[#CBBFE3]">
+                      {UI_TEXT.PHASE331.cumulativeGpaLabel}
+                    </div>
+                    <div className="font-num font-extrabold text-[#2559B8] dark:text-[#B8D8FE]">
+                      {eduState.cumulativeGpa.toFixed(2)}
+                    </div>
+                  </div>
+                  <div className="px-slot p-2 bg-[#FFFDFB] dark:bg-[#221B3B]">
+                    <div className="text-[10px] text-[#76658D] dark:text-[#CBBFE3]">
+                      {UI_TEXT.PHASE331.currentTrackLabel}
+                    </div>
+                    <div className="font-bold text-[#3D2D52] dark:text-[#FFF6FA] truncate">
+                      {eduState.highSchoolTrack
+                        ? `${HIGH_SCHOOL_TRACKS[eduState.highSchoolTrack].labelTh}${
+                            eduState.highSchoolTrack === 'vocational' && eduState.vocationalBranch
+                              ? ` (${VOCATIONAL_BRANCHES.find((b) => b.id === eduState.vocationalBranch)?.labelTh ?? eduState.vocationalBranch})`
+                              : ''
+                          }`
+                        : 'สายพื้นฐาน'}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="text-[11px] font-num font-semibold text-[#5A4773] dark:text-[#DDD6FE]">
+                  {UI_TEXT.PHASE331.annualTuitionLabel(SCHOOL_TIERS[eduState.schoolTier].monthlyFeeThb * 12)}
+                </div>
+
+                <div className="flex flex-wrap gap-1.5 text-[11px]">
+                  {eduState.trackReadiness && eduState.trackReadiness !== 'ready' && (
+                    <span className="px-2 py-0.5 bg-[#FFF9DB] text-[#735100] border border-[#4E3B69]/50 font-bold">
+                      ความพร้อมสายเรียน: {READINESS_META[eduState.trackReadiness].labelTh}
+                    </span>
+                  )}
+                  {eduState.pendingTransfer && (
+                    <span className="px-2 py-0.5 bg-[#EBF7FF] text-[#2559B8] border border-[#4E3B69]/50 font-bold">
+                      {UI_TEXT.PHASE331.pendingTransferNotice(
+                        SCHOOL_TIERS[eduState.pendingTransfer.targetTier].labelTh,
+                        Math.max(0, eduState.pendingTransfer.dueDay - state.date.totalDays)
+                      )}
+                    </span>
+                  )}
+                  {eduState.remedialDue && (
+                    <span className="px-2 py-0.5 bg-[#FFE0EE] text-[#BD346B] border border-[#4E3B69]/50 font-bold">
+                      {UI_TEXT.PHASE331.remedialWarningBadge}
+                    </span>
+                  )}
+                  {eduState.hasScholarship && eduState.scholarshipMinGpa != null && (
+                    <span className="px-2 py-0.5 bg-[#D6FAEA] text-[#165940] border border-[#4E3B69]/50 font-bold">
+                      {UI_TEXT.PHASE331.scholarshipActiveBadge(eduState.scholarshipMinGpa)}
+                    </span>
+                  )}
+                  {eduState.completedRotc ? (
+                    <span className="px-2 py-0.5 bg-[#D6FAEA] text-[#165940] border border-[#4E3B69]/50 font-bold">
+                      {character.gender === 'male'
+                        ? UI_TEXT.PHASE331.rotcBadgeCompletedMale
+                        : UI_TEXT.PHASE331.rotcBadgeCompletedFemale}
+                    </span>
+                  ) : eduState.rotcEnrolled ? (
+                    <span className="px-2 py-0.5 bg-[#FFF9DB] text-[#735100] border border-[#4E3B69]/50 font-bold">
+                      {UI_TEXT.PHASE331.rotcBadgeEnrolled(eduState.rotcYearsCompleted ?? 0)}
+                    </span>
+                  ) : null}
+                  {eduState.secondChanceEnrolled && (
+                    <span className="px-2 py-0.5 bg-[#EAE2FF] text-[#4C2E99] border border-[#4E3B69]/50 font-bold">
+                      {UI_TEXT.PHASE331.secondChanceProgressLabel(
+                        SECOND_CHANCE_PROGRAMS[eduState.secondChanceEnrolled].labelTh,
+                        eduState.secondChanceProgressTerms ?? 0,
+                        SECOND_CHANCE_PROGRAMS[eduState.secondChanceEnrolled].requiredTerms
+                      )}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -781,28 +1178,62 @@ export function MeTab({ state, onSelectExplain, onDispatch }: MeTabProps) {
               <div className="flex items-center gap-2">
                 <PixelIcon name="journal" size={18} />
                 <h3 className="font-display font-extrabold text-sm sm:text-base text-[#3D2D52] dark:text-[#FFF6FA]">
-                  ประวัติชีวิตและจุดเปลี่ยนที่ผ่านมา
+                  {UI_TEXT.PHASE331.lifeHistoryHeading}
                 </h3>
               </div>
-              <span className="text-xs font-num font-bold text-[#165940] dark:text-[#7EF4C2]">
-                {backstory.turningPoints.length} เหตุการณ์
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-num font-bold text-[#165940] dark:text-[#7EF4C2]">
+                  {(character.lifeHistory ?? []).length + backstory.turningPoints.length} รายการ
+                </span>
+                {onNavigateJournal && (
+                  <button
+                    type="button"
+                    onClick={onNavigateJournal}
+                    className="game-btn px-2 py-0.5 bg-[#FFFDFB] text-[#165940] text-[10px] font-bold"
+                  >
+                    {UI_TEXT.PHASE331.lifeHistoryOpenJournalBtn}
+                  </button>
+                )}
+              </div>
             </div>
 
-            <div className="p-3 sm:p-4 px-window-striped text-xs text-[#5A4773] dark:text-[#DDD6FE]">
-              {backstory.turningPoints.length === 0 ? (
+            <div className="p-3 sm:p-4 px-window-striped text-xs text-[#5A4773] dark:text-[#DDD6FE] space-y-2.5">
+              {(character.lifeHistory ?? []).length > 0 && (
+                <ul className="space-y-1.5">
+                  {(character.lifeHistory ?? []).slice(0, 8).map((entry) => (
+                    <li
+                      key={entry.id}
+                      className="px-inset p-2 bg-[#FFFDFB] dark:bg-[#221B3B] space-y-0.5"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-display font-bold text-[#3D2D52] dark:text-[#FFF6FA]">
+                          {entry.titleTh}
+                        </span>
+                        <span className="text-[10px] font-num text-[#76658D] dark:text-[#CBBFE3] shrink-0">
+                          {entry.dateLabel} · อายุ {entry.ageYears} ปี
+                        </span>
+                      </div>
+                      {entry.detailTh && (
+                        <p className="text-[11px] leading-snug">{entry.detailTh}</p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {(character.lifeHistory ?? []).length === 0 && backstory.turningPoints.length === 0 ? (
                 <div className="px-inset p-3 bg-[#FFFDFB] dark:bg-[#221B3B] text-[#76658D] dark:text-[#CBBFE3]">
-                  ยังไม่มีบันทึกจุดเปลี่ยนชีวิตสำคัญ เมื่อผ่านเหตุการณ์ชีวิตครั้งใหญ่ เรื่องราวจะถูกจดจำไว้ที่นี่
+                  {UI_TEXT.PHASE331.lifeHistoryEmpty}
                 </div>
-              ) : (
-                <ul className="space-y-1.5 list-disc pl-5">
+              ) : backstory.turningPoints.length > 0 ? (
+                <ul className="space-y-1 list-disc pl-5 pt-1 border-t border-dashed border-[#4E3B69]/20">
                   {backstory.turningPoints.map((tp, i) => (
                     <li key={i} className="leading-relaxed">
                       {tp}
                     </li>
                   ))}
                 </ul>
-              )}
+              ) : null}
             </div>
           </div>
         </div>

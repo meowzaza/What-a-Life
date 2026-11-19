@@ -43,17 +43,41 @@ export type RawStats = Record<RawStatKey, number>;
 export type ResourceKey = 'energy' | 'stress' | 'freeTime';
 export type TempResources = Record<ResourceKey, number>;
 
-export type SkillKey =
-  | 'english'
-  | 'sales'
-  | 'finance'
+export type CoreSkillId =
+  | 'academic'
   | 'tech'
   | 'craft'
-  | 'cooking'
-  | 'socializing'
-  | 'academic';
+  | 'social'
+  | 'business'
+  | 'athletics';
+
+export type DiscoveredSkillId =
+  | 'foreign_lang'
+  | 'culinary'
+  | 'visual_arts'
+  | 'music_vocal'
+  | 'performing_acting'
+  | 'dance_thai_modern'
+  | 'literature_writing';
+
+export type SkillKey = CoreSkillId | DiscoveredSkillId;
 
 export type Skills = Record<SkillKey, number>;
+
+export type ActivitySkillTagId =
+  | 'tag_draw'
+  | 'tag_music_play'
+  | 'tag_stage'
+  | 'tag_move'
+  | 'tag_cook'
+  | 'tag_read_write'
+  | 'tag_lang_media'
+  | 'tag_numbers'
+  | 'tag_tech_play'
+  | 'tag_make'
+  | 'tag_sell'
+  | 'tag_lead'
+  | 'tag_sport';
 
 export type RegionId = 'bangkok' | 'central' | 'north' | 'northeast' | 'east' | 'south';
 
@@ -77,9 +101,112 @@ export type EducationLevel =
   | 'lower_secondary'
   | 'upper_secondary'
   | 'vocational'
+  | 'nfe_lower'
+  | 'nfe_upper'
   | 'bachelor'
   | 'master'
   | 'doctorate';
+
+export type SchoolTier =
+  | 'school_temple'
+  | 'school_public'
+  | 'school_private'
+  | 'school_international';
+
+export type HighSchoolTrack =
+  | 'sci_math'
+  | 'arts_math'
+  | 'arts_lang'
+  | 'arts_fine'
+  | 'vocational';
+
+export type VocationalBranchId = 'craft' | 'tech' | 'culinary' | 'business';
+
+export type ReadinessLevel = 'ready' | 'risky' | 'very_risky';
+
+export interface GpaTermRecord {
+  termId: string;
+  gpa: number;
+  gpax: number;
+  parts: Record<string, number>;
+}
+
+export interface PendingSchoolTransfer {
+  targetTier: SchoolTier;
+  requestedDay: number;
+  dueDay: number;
+  probability: number;
+  yearCE: number;
+}
+
+export interface LifeHistoryEntry {
+  id: string;
+  ageYears: number;
+  ageMonths: number;
+  dateLabel: string;
+  kind: string;
+  titleTh: string;
+  detailTh?: string;
+}
+
+export type SecondChanceEduType =
+  | 'nfe_lower'
+  | 'nfe_upper'
+  | 'uni_open_evening';
+
+export interface EducationState {
+  level: EducationLevel;
+  schoolTier: SchoolTier;
+  highSchoolTrack?: HighSchoolTrack;
+  fineArtSkill?: DiscoveredSkillId;
+  vocationalBranch?: VocationalBranchId;
+  universityId?: string;
+  facultyId?: string;
+  majorId?: string;
+  currentGpa: number;
+  cumulativeGpa: number;
+  termCount?: number;
+  gpaHistory?: GpaTermRecord[];
+  trackReadiness?: ReadinessLevel;
+  readinessTermsRemaining?: number;
+  trackAdjustmentTermsRemaining?: number;
+  trackChangeCountThisYear?: number;
+  trackChangeLastYearCE?: number;
+  teacherTermDelta?: number;
+  pendingTransfer?: PendingSchoolTransfer | null;
+  scholarshipMinGpa?: number | null;
+  hasScholarship?: boolean;
+  hasStudentLoan: boolean;
+  completedRotc: boolean;
+  rotcEnrolled?: boolean;
+  rotcYearsCompleted?: number;
+  rotcGovServiceBonus?: number;
+  draftExemption?: boolean;
+  remedialDue?: boolean;
+  secondChanceEnrolled?: SecondChanceEduType | null;
+  secondChanceProgressTerms?: number;
+  tcasExamScore?: number | null;
+}
+
+export type TalentKind = 'skill' | 'personality' | 'genius' | 'limitation' | 'special';
+export type TalentTier = 1 | 2 | 3;
+
+export interface Talent {
+  id: string;
+  kind: TalentKind;
+  tier: TalentTier;
+  revealed: boolean;
+  acquiredAtAge: number;
+  source: 'birth' | 'gacha' | 'event';
+  fixableBy?: string[];
+  curedAtAge?: number;
+  hintShownCount?: number;
+}
+
+export interface DiscoveredSkillProgress {
+  sessions: number;
+  hours: number;
+}
 
 export type Gender = 'male' | 'female' | 'nonbinary';
 
@@ -223,7 +350,40 @@ export type ActivityId =
   | 'hobby_leisure'
   | 'quiet_rest'
   | 'sleep_full'
-  | 'sleep_normal';
+  | 'sleep_normal'
+  | 'kid_play_neighbors'
+  | 'kid_playground'
+  | 'kid_ride_bike'
+  | 'kid_thai_games'
+  | 'kid_soccer_field'
+  | 'kid_swim_guardian'
+  | 'kid_cartoons_family'
+  | 'kid_read_library'
+  | 'kid_draw_home'
+  | 'kid_sing_play'
+  | 'kid_dance_clip'
+  | 'kid_help_cook'
+  | 'kid_chores'
+  | 'kid_water_plants'
+  | 'kid_homework_group'
+  | 'kid_homework_alone'
+  | 'kid_exam_review'
+  | 'kid_computer_play'
+  | 'kid_build_toys'
+  | 'kid_fix_with_dad'
+  | 'kid_scout_practice'
+  | 'kid_temple_day'
+  | 'kid_visit_grandparents'
+  | 'kid_night_market_walk'
+  | 'kid_stargazing'
+  | 'kid_pet_care'
+  | 'kid_board_games'
+  | 'kid_write_stories'
+  | 'kid_act_play'
+  | 'kid_flag_announce'
+  | 'kid_sleepover'
+  | 'kid_nap_rest'
+  | 'kid_home_games';
 
 export type AnnualFocusId =
   | 'save_money'
@@ -305,6 +465,9 @@ export interface PlannerState {
   annualFocus?: AnnualFocusState;
   calendarPins?: CalendarPin[];
   streaks?: PlannerStreakState;
+  activitySkillTags?: Partial<
+    Record<'hobby_leisure' | 'attend_course' | 'university_club' | 'self_study', ActivitySkillTagId>
+  >;
 }
 
 export interface SideGigRecord {
@@ -318,22 +481,41 @@ export interface SideGigRecord {
 }
 
 export type SkillCourseDuration = 4 | 8 | 12;
+export type SkillTierId = 1 | 2 | 3;
+export type SkillLevelNum = 1 | 2 | 3 | 4 | 5;
+
+export interface SkillLevelState {
+  level: SkillLevelNum;
+  xp: number;
+  unlockedTier: SkillTierId;
+  unlockedTierSourceTh?: string;
+  unlockedViaChildEvent?: boolean;
+  discoveredHours?: number;
+  certificates: string[];
+}
 
 export interface SkillCourseState {
   skillId: SkillKey;
   weeksLeft: number;
   totalWeeks: SkillCourseDuration;
   feePerWeek: number;
+  missedWeeks?: number;
+  feePaid?: number;
+  practiceHoursThisWeek?: number;
 }
 
 export interface SkillTrainingState {
   focus: SkillKey[];
   course?: SkillCourseState | null;
   xp: Record<SkillKey, number>;
+  skillStates?: Record<SkillKey, SkillLevelState>;
   lastPracticedWeek: Record<SkillKey, number>;
+  discoveredSkills?: DiscoveredSkillId[];
+  tagProgress?: Partial<Record<ActivitySkillTagId, DiscoveredSkillProgress>>;
+  limitationProgress?: Record<string, { sessions: number; weeks: number }>;
   socialHighWeeks?: number;
   savingStreakWeeks?: number;
-  lastLoggedCap?: Partial<Record<SkillKey, 30 | 60>>;
+  lastLoggedCap?: Partial<Record<SkillKey, 30 | 60 | 2 | 4>>;
 }
 
 export type RiskProfile = 'cautious' | 'balanced' | 'bold';
@@ -448,6 +630,15 @@ export interface Person {
   emergentTraits?: EmergentTraitInstance[];   // Layer C
   innerTension?: number;                      // 0..100 when conflicting traits coexist
   reputationView?: ReputationView;            // Phase 4 NPC perception hook
+  talents?: Talent[];                         // Phase 3.3.1-FIX positive/special active/unrevealed talents (revealed active <= 3)
+  talentVault?: Talent[];                     // Phase 3.3.1-FIX overflow talent vault (<= 5)
+  lastTalentRevealAgeMonths?: number;         // Phase 3.3.1-FIX 36-month cooldown anchor
+  lastTalentRevealLifeStage?: string;         // Phase 3.3.1-FIX life stage reveal cap
+  talentSwapWindowTag?: string;               // Phase 3.3.1-FIX turning-point swap window id
+  lastTalentSwapWindowTag?: string;           // Phase 3.3.1-FIX last used swap window id
+  limitations?: Talent[];                     // Phase 3.3.1 fixable limitations (debuffs)
+  educationState?: EducationState;            // Phase 3.3.1 schooling / GPA / track / ROTC
+  lifeHistory?: LifeHistoryEntry[];           // Phase 3.3.1-FIX major turning points (MeTab displays latest 8)
   flags: Record<string, boolean>;
   appearance?: CharacterAppearance;
 }
@@ -506,6 +697,7 @@ export type Effect =
   | { type: 'ApplyTurningPoint'; kind: string; reason: string }
   | { type: 'RevealTrait'; traitId: string; reason: string }
   | { type: 'SetAnnualFocus'; focusId: AnnualFocusId; reason: string }
+  | { type: 'ModifyTeacherGpa'; delta: number; reason: string }
   | {
       type: 'ScheduleEcho';
       delayDays: number;
@@ -542,6 +734,12 @@ export interface EventChoice {
   hint?: string;
   requiresAdult?: boolean;
   blockedByTraits?: Array<{ traitId: string; minIntensity?: string; reasonTh: string }>;
+  requiredWealth?: FamilyWealthTier[];
+  requiredAnyTalents?: string[];
+  requiredSkills?: Partial<Record<SkillKey, number>>;
+  requiredMinGpa?: number;
+  requiredMinRawStats?: Partial<Record<RawStatKey, number>>;
+  conditionalUnlockReasonTh?: string;
   fallbackAutopilotAction?: string;
   effects: Effect[];
   costCash?: number;
@@ -686,6 +884,7 @@ export type PlayerAction =
   | { type: 'CHANGE_WORK_SHIFT'; workShift: WorkShiftSchedule }
   | { type: 'SET_SKILL_FOCUS'; focus: SkillKey[] }
   | { type: 'ENROLL_SKILL_COURSE'; skillId: SkillKey; weeks: SkillCourseDuration }
+  | { type: 'SWAP_TALENT_SLOT'; activeIdx: number; vaultIdx: number }
   | { type: 'BORROW_MONEY'; amount: number }
   | { type: 'REPAY_DEBT'; amount: number }
   | { type: 'RESOLVE_PROMPT'; promptId: string; choiceId: string }
@@ -703,6 +902,15 @@ export type PlayerAction =
   | { type: 'SET_ANNUAL_FOCUS'; focusId: AnnualFocusId }
   | { type: 'ADD_CALENDAR_PIN'; month: number; day: number; title: string; note?: string }
   | { type: 'REMOVE_CALENDAR_PIN'; pinId: string }
+  | {
+      type: 'SET_ACTIVITY_SUBFOCUS';
+      activityId: 'hobby_leisure' | 'attend_course' | 'university_club' | 'self_study';
+      tagId: ActivitySkillTagId;
+    }
+  | { type: 'CHOOSE_HIGH_SCHOOL_TRACK'; track: HighSchoolTrack; fineArtSkill?: DiscoveredSkillId; vocationalBranch?: VocationalBranchId }
+  | { type: 'ENROLL_ROTC'; enroll: boolean }
+  | { type: 'CHANGE_SCHOOL_TIER'; schoolTier: SchoolTier }
+  | { type: 'ENROLL_SECOND_CHANCE_EDU'; program: SecondChanceEduType | null }
   | { type: 'DEV_SET_PLANNER_STREAKS'; patch: Partial<PlannerStreakState> }
   | { type: 'DEV_TOGGLE_FLAG'; flag: string; value?: boolean }
   | { type: 'DEV_TRIGGER_ANNUAL_FOCUS_PROMPT' };

@@ -468,7 +468,7 @@ export const TRAIT_CATALOG: TraitDefinition[] = [
     defaultVisibility: 'known',
     descriptionTh: 'จับจังหวะบทสนทนาเก่ง พูดจาน่าเชื่อถือและสร้างความคุ้นเคยได้รวดเร็ว',
     subtleHintTh: 'แค่คุยไม่กี่นาทีก็ทำให้คนแปลกหน้ายิ้มและเปิดใจได้',
-    evidenceReqs: [{ key: 'nightlife_social', min: 5 }, { key: 'practice_sales', min: 4 }],
+    evidenceReqs: [{ key: 'nightlife_social', min: 5 }, { key: 'practice_business', min: 4 }],
     personalityReq: { minAgreeableness: 45 },
     sensitiveStageBonus: 1.1,
     intensityThresholds: { subtle: 9, clear: 18, core: 30 },
@@ -693,7 +693,7 @@ export const TRAIT_CATALOG: TraitDefinition[] = [
     defaultVisibility: 'known',
     descriptionTh: 'คำนวณผลได้ผลเสียก่อนลงมือเสมอ ลดโอกาสพลาดพลั้งจากหนี้สินและเหตุฉุกเฉิน',
     subtleHintTh: 'มักถามถึงแผนสำรองและค่าใช้จ่ายแฝงก่อนตัดสินใจทุกเรื่อง',
-    evidenceReqs: [{ key: 'disciplined_saving', min: 4 }, { key: 'practice_finance', min: 4 }],
+    evidenceReqs: [{ key: 'disciplined_saving', min: 4 }, { key: 'practice_business', min: 4 }],
     personalityReq: { minStability: 50 },
     sensitiveStageBonus: 1.0,
     intensityThresholds: { subtle: 8, clear: 16, core: 28 },
@@ -978,7 +978,7 @@ export interface GatedActionDef {
   blockedByTraits: Array<{
     traitId: string;
     minIntensity: TraitIntensity;
-    overrideSkill?: { skill: 'socializing' | 'finance' | 'tech' | 'academic'; min: number };
+    overrideSkill?: { skill: 'social' | 'business' | 'tech' | 'academic'; min: number };
     reasonTh: string;
   }>;
   rewardEffectsSummary: string;
@@ -996,7 +996,7 @@ export const TRAIT_GATED_ACTIONS: GatedActionDef[] = [
       {
         traitId: 'self_doubting',
         minIntensity: 'clear',
-        overrideSkill: { skill: 'socializing', min: 25 },
+        overrideSkill: { skill: 'social', min: 25 },
         reasonTh: 'ยังไม่กล้าทำกิจกรรมนี้เพราะนิสัยไม่มั่นใจในตัวเองติดตัวอยู่ชัดเจน (ลองฝึกทักษะการเข้าสังคมเพิ่มจนคล่องขึ้น)',
       },
     ],
@@ -1029,8 +1029,8 @@ export const TRAIT_GATED_ACTIONS: GatedActionDef[] = [
       {
         traitId: 'emotional_spender',
         minIntensity: 'core',
-        overrideSkill: { skill: 'finance', min: 20 },
-        reasonTh: 'คุมใจยังไม่ได้เพราะนิสัยใช้จ่ายตามอารมณ์ฝังลึกอยู่ (ลองฝึกทักษะบริหารเงินให้คล่องขึ้นเพื่อปลดล็อก)',
+        overrideSkill: { skill: 'business', min: 20 },
+        reasonTh: 'คุมใจยังไม่ได้เพราะนิสัยใช้จ่ายตามอารมณ์ฝังลึกอยู่ (ลองฝึกทักษะธุรกิจและการจัดการเงินให้คล่องขึ้นเพื่อปลดล็อก)',
       },
     ],
     rewardEffectsSummary: 'ทักษะการเงินดีขึ้น · เสริมวินัยการออมอย่างต่อเนื่อง',

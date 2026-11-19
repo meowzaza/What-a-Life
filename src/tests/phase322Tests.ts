@@ -191,14 +191,19 @@ function test2_MinorLocksAndRuleValidation() {
       ...adultWorker.character,
       flags: { ...adultWorker.character.flags, freelance_unlocked: true },
       skills: {
-        english: 20,
-        sales: 20,
-        finance: 20,
+        academic: 25,
         tech: 25,
         craft: 20,
-        cooking: 20,
-        socializing: 20,
-        academic: 25,
+        social: 20,
+        business: 20,
+        athletics: 20,
+        visual_arts: 0,
+        music_vocal: 0,
+        performing_acting: 0,
+        dance_thai_modern: 0,
+        culinary: 0,
+        foreign_lang: 0,
+        literature_writing: 0,
       },
     },
   };
@@ -386,7 +391,7 @@ function test4_Determinism1YearAndHolidayOverride() {
       return dispatchPlayerAction(st, { type: 'CHANGE_WORK_SHIFT', workShift: 'afternoon-evening' }).state;
     }
     if (st.date.totalDays === 30) {
-      return dispatchPlayerAction(st, { type: 'SET_SKILL_FOCUS', focus: ['tech', 'english'] }).state;
+      return dispatchPlayerAction(st, { type: 'SET_SKILL_FOCUS', focus: ['tech', 'business'] }).state;
     }
     return st;
   };
@@ -485,10 +490,10 @@ function test6_Patch322RealisticOvertimeAndSideGig() {
       ...adult.character,
       skills: {
         ...adult.character.skills,
-        cooking: 30,
-        finance: 30,
+        culinary: 30,
+        business: 30,
         tech: 45,
-        english: 35,
+        foreign_lang: 35,
       },
       indices: {
         ...adult.character.indices,

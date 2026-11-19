@@ -75,5 +75,6 @@ export const ALLOWED_STORYLET_EFFECT_TYPES = new Set([
   'ChangeTenure',
   'StartJobShift',
   'SetAnnualFocus',
+  'ModifyTeacherGpa',
   'SetDeath',
 ]);

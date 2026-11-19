@@ -1,11 +1,13 @@
 import { ANNUAL_FOCUS_BY_ID } from '../data/annualFocus';
 import sceneManifestRaw from '../data/sceneManifest.json';
+import { DISCOVERED_SKILL_IDS } from '../data/skills';
 import { HOUSINGS, JOBS, RAW_STAT_LABELS, SKILL_LABELS } from '../data/thaiData';
 import { PERSONALITY_AXIS_META, TRAITS_BY_ID, TURNING_POINTS_BY_KIND } from '../data/traits';
 import { formatShortThaiDate } from './clock';
 import { recalculateEconomyDerived } from './economy';
 import { recordEvidence } from './evidence';
 import { clamp, round2 } from './rng';
+import { grantStoryletSkillPoints } from './skillTraining';
 import { computeLifeIndices } from './stats';
 import { applyTurningPoint, revealTrait, translateEvidenceKey } from './traits';
 import type {
@@ -180,6 +182,9 @@ export function summarizeEffects(effects: Effect[]): string[] {
       case 'ChangeMoney':
         out.push(`เงินสด ${eff.amount >= 0 ? '+' : ''}${eff.amount.toLocaleString('th-TH')} บาท`);
         break;
+      case 'ModifyTeacherGpa':
+        out.push(`คะแนนเก็บอาจารย์ ${eff.delta >= 0 ? '+' : ''}${eff.delta.toFixed(2)}`);
+        break;
       case 'RemoveFlag':
         out.push(FLAG_LABEL_TH[eff.flag] ?? (eff.reason || 'ปรับสถานะชีวิตประจำวัน'));
         break;
@@ -233,6 +238,7 @@ export function applyEffects(state: GameState, effects: Effect[], recordStatLogs
   let economy = { ...state.economy };
   let echoQueue = [...state.echoQueue];
   let statLogs = [...state.statLogs];
+  let nextSkillTraining = state.skillTraining;
 
   for (const eff of effects) {
     switch (eff.type) {
@@ -256,16 +262,19 @@ export function applyEffects(state: GameState, effects: Effect[], recordStatLogs
         break;
       }
       case 'ChangeSkill': {
-        const prev = character.skills[eff.skill];
-        const next = round2(clamp(prev + eff.delta, 0, 100));
-        character.skills[eff.skill] = next;
+        const prev = character.skills[eff.skill] ?? 0;
+        const tempState: GameState = { ...state, character, economy, skillTraining: nextSkillTraining };
+        const updatedState = grantStoryletSkillPoints(tempState, eff.skill, eff.delta, eff.reason);
+        character.skills = { ...updatedState.character.skills };
+        nextSkillTraining = updatedState.skillTraining;
+        const next = character.skills[eff.skill] ?? prev;
         if (recordStatLogs) {
           statLogs = pushStatLog(statLogs, state, `skill:${eff.skill}`, next - prev, next, eff.reason);
         }
         break;
       }
       case 'AddMoney': {
-        if (eff.category === 'side' && eff.amount > 0 && character.ageYears < 15) {
+        if (character.ageYears < 15 && eff.amount !== 0) {
           break;
         }
         const prev = economy.cash;
@@ -329,7 +338,7 @@ export function applyEffects(state: GameState, effects: Effect[], recordStatLogs
         break;
       }
       case 'ChangeMoney': {
-        if (eff.category === 'side' && eff.amount > 0 && character.ageYears < 15) {
+        if (character.ageYears < 15 && eff.amount !== 0) {
           break;
         }
         // Enforce hard economy ceilings on single events to prevent broken simulation state
@@ -366,9 +375,12 @@ export function applyEffects(state: GameState, effects: Effect[], recordStatLogs
           }
         } else if (k in character.skills) {
           const skK = k as keyof typeof character.skills;
-          const prev = character.skills[skK];
-          const next = round2(clamp(prev + eff.delta, 0, 100));
-          character.skills[skK] = next;
+          const prev = character.skills[skK] ?? 0;
+          const tempState: GameState = { ...state, character, economy, skillTraining: nextSkillTraining };
+          const updatedState = grantStoryletSkillPoints(tempState, skK, eff.delta, eff.reason);
+          character.skills = { ...updatedState.character.skills };
+          nextSkillTraining = updatedState.skillTraining;
+          const next = character.skills[skK] ?? prev;
           if (recordStatLogs) {
             statLogs = pushStatLog(statLogs, state, `skill:${skK}`, next - prev, next, eff.reason);
           }
@@ -429,6 +441,25 @@ export function applyEffects(state: GameState, effects: Effect[], recordStatLogs
         }
         break;
       }
+      case 'ModifyTeacherGpa': {
+        const curEdu = character.educationState ?? {
+          level: character.education,
+          schoolTier: 'school_public',
+          currentGpa: 2.75,
+          cumulativeGpa: 2.75,
+          termCount: 1,
+          hasStudentLoan: false,
+          completedRotc: false,
+        };
+        const prev = curEdu.teacherTermDelta ?? 0;
+        const nextVal = round2(clamp(prev + eff.delta, -0.30, 0.30));
+        curEdu.teacherTermDelta = nextVal;
+        character.educationState = curEdu;
+        if (recordStatLogs) {
+          statLogs = pushStatLog(statLogs, state, 'edu:teacherDelta', nextVal - prev, nextVal, eff.reason);
+        }
+        break;
+      }
       case 'RecordEvidence':
       case 'ApplyTurningPoint':
       case 'RevealTrait':
@@ -442,12 +473,28 @@ export function applyEffects(state: GameState, effects: Effect[], recordStatLogs
   economy = recalculateEconomyDerived(character, economy);
   character.indices = computeLifeIndices(character, economy);
 
+  const discSet = new Set(nextSkillTraining?.discoveredSkills ?? []);
+  let discAdded = false;
+  for (const dKey of DISCOVERED_SKILL_IDS) {
+    if ((character.skills[dKey] ?? 0) > 0 && !discSet.has(dKey)) {
+      discSet.add(dKey);
+      discAdded = true;
+    }
+  }
+  if (discAdded && nextSkillTraining) {
+    nextSkillTraining = {
+      ...nextSkillTraining,
+      discoveredSkills: Array.from(discSet),
+    };
+  }
+
   let nextState: GameState = {
     ...state,
     character,
     economy,
     echoQueue,
     statLogs,
+    skillTraining: nextSkillTraining,
   };
 
   for (const eff of effects) {

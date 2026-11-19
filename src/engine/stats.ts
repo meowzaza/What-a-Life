@@ -69,13 +69,13 @@ function computeFinancialComponents(person: Person, economy: EconomyState): Expl
   const cashflowScore = clamp(netMonthly / 1500, -18, 28);
   const debtRatioPenalty = economy.debt > 0 ? -clamp(economy.debt / Math.max(15000, economy.monthlySalary * 2 + 15000) * 18, 1, 35) : 0;
   const creditBonus = clamp((economy.creditScore - 500) / 22, -10, 18);
-  const financeSkillBonus = person.skills.finance * 0.15;
+  const businessSkillBonus = (person.skills.business ?? 0) * 0.15;
 
   return [
     { label: 'เงินสดสำรองที่มีติดตัว', value: Math.round(economy.cash), weight: 'สภาพคล่อง', contribution: round2(cashScore) },
     { label: 'เงินเหลือเก็บต่อเดือน (รายรับหักรายจ่าย)', value: Math.round(netMonthly), weight: 'กระแสเงินสด', contribution: round2(cashflowScore) },
     { label: 'ความน่าเชื่อถือทางการเงิน', value: Math.round(economy.creditScore), weight: 'เครดิต', contribution: round2(creditBonus) },
-    { label: 'ทักษะการวางแผนและคุมเงิน', value: round2(person.skills.finance), weight: 'ทักษะ', contribution: round2(financeSkillBonus) },
+    { label: 'ทักษะธุรกิจและการจัดการเงิน', value: round2(person.skills.business ?? 0), weight: 'ทักษะ', contribution: round2(businessSkillBonus) },
     { label: 'ภาระหนี้สินที่ต้องแบกรับ', value: Math.round(economy.debt), weight: 'หนี้สิน', contribution: round2(debtRatioPenalty) },
   ];
 }
@@ -87,7 +87,7 @@ function computeSocialComponents(person: Person): ExplainComponent[] {
     { label: 'เสน่ห์ในการพูดคุยและเข้าหาคน', value: rawStats.charisma, weight: 'หลัก', contribution: round2(rawStats.charisma * 0.34) },
     { label: 'บุคลิกภาพและการดูแลตัวเอง', value: rawStats.looks, weight: 'เสริม', contribution: round2(rawStats.looks * 0.2) },
     { label: 'ความน่าเชื่อถือและความไว้ใจจากคนรอบข้าง', value: rawStats.reliability, weight: 'เสริม', contribution: round2(rawStats.reliability * 0.22) },
-    { label: 'ทักษะการเข้าสังคมและการผูกมิตร', value: round2(skills.socializing), weight: 'ทักษะ', contribution: round2(skills.socializing * 0.24) },
+    { label: 'ทักษะการสื่อสารและการเข้าสังคม', value: round2(skills.social ?? 0), weight: 'ทักษะ', contribution: round2((skills.social ?? 0) * 0.24) },
     ...(stressFriction !== 0
       ? [{ label: 'ความเครียดสูงจนไม่อยากสุงสิงกับใคร', value: resources.stress, weight: 'ลดทอน', contribution: round2(stressFriction) }]
       : []),
@@ -186,7 +186,7 @@ export function computeLifeIndices(person: Person, economy: EconomyState): LifeI
     round2(cashScore) +
     round2(cashflowScore) +
     round2(creditBonus) +
-    round2(skills.finance * 0.15) +
+    round2((skills.business ?? 0) * 0.15) +
     round2(debtRatioPenalty);
 
   // 4. Social
@@ -195,7 +195,7 @@ export function computeLifeIndices(person: Person, economy: EconomyState): LifeI
     round2(rawStats.charisma * 0.34) +
     round2(rawStats.looks * 0.2) +
     round2(rawStats.reliability * 0.22) +
-    round2(skills.socializing * 0.24) +
+    round2((skills.social ?? 0) * 0.24) +
     round2(stressFriction);
 
   // 5. Status
@@ -225,17 +225,22 @@ export function computeLifeIndices(person: Person, economy: EconomyState): LifeI
   let s2 = 0;
   let s3 = 0;
   const vals = [
-    skills.english,
-    skills.sales,
-    skills.finance,
+    skills.academic,
     skills.tech,
     skills.craft,
-    skills.cooking,
-    skills.socializing,
-    skills.academic,
+    skills.social,
+    skills.business,
+    skills.athletics,
+    skills.foreign_lang,
+    skills.culinary,
+    skills.visual_arts,
+    skills.music_vocal,
+    skills.performing_acting,
+    skills.dance_thai_modern,
+    skills.literature_writing,
   ];
   for (let i = 0; i < vals.length; i++) {
-    const v = vals[i];
+    const v = vals[i] ?? 0;
     if (v >= s1) {
       s3 = s2;
       s2 = s1;
@@ -395,24 +400,35 @@ export function explainStat(state: GameState, targetKey: string): ExplainBreakdo
     const details = getSkillGrowthDetails(state, key);
     const components: ExplainComponent[] = [
       {
-        label: `ระดับความชำนาญ (${details.tierLabelTh})`,
-        value: round2(details.level),
+        label: `ระดับ Lv.${details.levelNum} (${details.levelNameTh}) · ขั้น${details.tierLabelTh} (สูงสุด Lv.${details.maxLevelForTier})`,
+        value: round2(details.levelNum),
         weight: details.atCap ? 'ติดเพดาน' : details.tierLabelTh,
-        contribution: round2(details.level),
+        contribution: round2(details.levelNum),
       },
       {
-        label: `ความคืบหน้าสู่ระดับถัดไป (${details.xpProgressPct}%)`,
+        label:
+          details.xpThreshold > 0
+            ? `ค่าประสบการณ์ ${Math.round(details.xp)} / ${details.xpThreshold} XP (${details.xpProgressPct}%)`
+            : 'ระดับเชี่ยวชาญสูงสุด (Lv.5)',
         value: details.xpProgressPct,
         weight: details.isFocused ? 'กำลังโฟกัส' : 'พื้นฐาน',
         contribution: round2(details.xpProgressPct),
       },
       {
-        label: `อัตราพัฒนาต่อสัปดาห์ (${details.estimatedWeeklyGain > 0 ? `+${details.estimatedWeeklyGain.toFixed(2)}` : 'คงที่'})`,
+        label: `อัตราพัฒนาต่อสัปดาห์ (${details.estimatedWeeklyGain > 0 ? `+${details.estimatedWeeklyGain.toFixed(2)} XP` : 'คงที่'})`,
         value: round2(details.estimatedWeeklyGain),
-        weight: details.hasActiveCourse ? 'มีคอร์ส' : 'ปกติ',
+        weight: details.hasActiveCourse ? 'มีคอร์ส x1.5' : 'ปกติ',
         contribution: round2(details.estimatedWeeklyGain),
       },
     ];
+    if (details.certificates.length > 0) {
+      components.push({
+        label: `ใบประกาศนียบัตร (${details.certificates.length} ใบ)`,
+        value: details.certificates.length,
+        weight: 'รับรองถาวร',
+        contribution: details.certificates.length,
+      });
+    }
     for (const reason of details.slowReasonsTh) {
       components.push({
         label: reason,
@@ -424,7 +440,7 @@ export function explainStat(state: GameState, targetKey: string): ExplainBreakdo
     if (details.unlockHintTh) {
       components.push({
         label: `ทางไปต่อ: ${details.unlockHintTh}`,
-        value: details.effectiveCap,
+        value: details.maxLevelForTier,
         weight: 'เงื่อนไข',
         contribution: 0,
       });
@@ -433,9 +449,9 @@ export function explainStat(state: GameState, targetKey: string): ExplainBreakdo
       details.slowReasonsTh.length > 0 ? ` (${details.slowReasonsTh.join('; ')})` : '';
     return {
       key: targetKey,
-      title: `ทักษะ: ${meta.label} (${details.tierLabelTh})`,
+      title: `ทักษะ: ${meta.label} · Lv.${details.levelNum} (${details.levelNameTh})`,
       currentValue: round2(character.skills[key]),
-      formulaText: `${meta.description} — พัฒนาได้สูงสุดในตอนนี้ที่ระดับ ${details.effectiveCap} · ${details.unlockHintTh}${slowSummary}`,
+      formulaText: `${meta.description} — ขั้น${details.tierLabelTh} (สูงสุด Lv.${details.maxLevelForTier}) · ${details.unlockHintTh}${slowSummary}`,
       components,
       recentLogs: statLogs.filter((l) => l.target === targetKey).slice(-10).reverse(),
     };

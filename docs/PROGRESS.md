@@ -1,7 +1,7 @@
 # PROGRESS.md — บันทึกประวัติงานที่ทำเสร็จแล้วทั้งหมด (Completed Phases Ledger)
 
 > **กติกาสำหรับ AI (ห้ามทำซ้ำ & การอัปเดตเอกสาร):**
-> 1. ไฟล์นี้คือบันทึกสิ่งที่ **สร้างและทดสอบเสร็จสมบูรณ์แล้วในโค้ดจริง (Phase 1 ถึง Phase 3.2.4-DOC รวม 17 รอบงาน)** ห้ามรื้อสร้างซ้ำเด็ดขาด ให้เรียกใช้ฟังก์ชันที่มีอยู่แล้วตามที่ระบุไว้
+> 1. ไฟล์นี้คือบันทึกสิ่งที่ **สร้างและทดสอบเสร็จสมบูรณ์แล้วในโค้ดจริง (Phase 1 ถึง Phase 3.3.1 รวม 18 รอบงาน)** ห้ามรื้อสร้างซ้ำเด็ดขาด ให้เรียกใช้ฟังก์ชันที่มีอยู่แล้วตามที่ระบุไว้
 > 2. **เมื่อต้องเช็กประวัติย้อนหลัง:** ให้ค้นหา (Search) เฉพาะหัวข้อรหัส Phase ที่เกี่ยวข้อง ไม่ต้องอ่านไล่ตั้งแต่บรรทัดแรกจนจบเพื่อประหยัดโทเคน
 > 3. **สิทธิ์การอัปเดตไฟล์โดย AI:** AI สามารถเข้ามาอัปเดต เพิ่มเติม หรือแก้ไขข้อมูลในไฟล์นี้ (รวมถึง `ROADMAP.md`, `CODE_MAP.md`, `DESIGN.md`, `BACKLOG_IDEAS.md`) ได้ด้วยตัวเอง **เมื่อผู้ใช้ตกลงยืนยันหรือสั่งให้จัดการแล้วเท่านั้น** (ห้ามแก้แผนงานเองโดยพลการหากผู้ใช้แค่ถามปรึกษา)
 
@@ -129,3 +129,11 @@
 - **ไฟล์ที่สร้าง:** โฟลเดอร์ `docs/catalogs/` (12 ไฟล์), `CORE_BLUEPRINTS.md`, `CODE_MAP.md` (เขียนใหม่จาก export ในโค้ดจริง), `DECISIONS.md`, `BACKLOG_IDEAS.md`, `ROADMAP.md`, `specs/00_index.md`, `specs/07_education_tcas_and_skills.md`, `specs/SPEC_EDIT_QUEUE.md`
 - **สิ่งที่ทำเสร็จ:**
   - วางเอกสารชุดใหม่ทับ ย้ายของเก่าเข้า `docs/_archive/pre-3.2.4-DOC/` ตัดการ์ดศิลปิน/จับฉลากปีใหม่ออกจากแผนกาชา เปลี่ยนแท็ก `[ร่าง]` เป็น `[ยืนยัน]` แก้ชื่อ `01_scene_catalog_v2.md` เป็น `01_scene_catalog.md`
+
+### 18. Phase 3.3.1: ทักษะ 2 ชั้น, พรสวรรค์หลายชนิด & ระบบเรียน/GPA — เสร็จแล้ว
+- **ไฟล์ที่สร้าง:** `src/data/skills.ts`, `src/data/talents.ts`, `src/data/education.ts`, `src/engine/talents.ts`, `src/engine/education.ts`, `src/tests/phase331Tests.ts`
+- **ไฟล์ที่แก้:** `src/engine/types.ts`, `src/engine/skillTraining.ts`, `src/engine/save.ts`, `src/engine/lifegen.ts`, `src/engine/pipeline.ts`, `src/engine/planner.ts`, `src/engine/state.ts`, `src/engine/stats.ts`, `src/engine/storylet.ts`, `src/engine/director.ts`, `src/engine/log.ts`, `src/engine/timeAlloc.ts`, `src/engine/traits.ts`, `src/engine/traitEffects.ts`, `src/data/skillTraining.ts`, `src/data/activities.ts`, `src/data/traits.ts`, `src/data/thaiData.ts`, `src/data/autopilot.ts`, `src/data/uiText.ts`, `src/data/storylets/catalog.ts`, `src/data/storylets/plannerStorylets.ts`, `src/ui/components/tabs/MeTab.tsx`, `src/ui/components/tabs/WorkStudyTab.tsx`, `src/ui/components/LifePlannerPanel.tsx`, `src/ui/screens/MainGameScreen.tsx`, `package.json`
+- **สิ่งที่ทำเสร็จ:**
+  - **ทักษะ 2 ชั้น (13 ทักษะ แทนชุดเก่า 8 ตัว):** แยก `CoreSkillId` 6 ด้าน (`academic`, `tech`, `craft`, `social`, `business`, `athletics`) และ `DiscoveredSkillId` 7 ด้าน (`visual_arts`, `music_vocal`, `performing_acting`, `dance_thai_modern`, `culinary`, `foreign_lang`, `literature_writing`) พร้อม `tagProgress` ค้นพบอิสระจากแท็กกิจกรรม (`>= 8` ครั้ง หรือ `>= 24` ชม.) และ Migration เซฟเก่าใน `save.ts` (`socializing -> social`, `max(sales, finance) -> business`, `english -> foreign_lang`, `cooking -> culinary`)
+  - **พรสวรรค์หลายชนิดและข้อจำกัดแก้ไขได้ (`talents.ts`):** สุ่ม 0–หลายอย่างตอนเกิด (~35/40/20/5%) 3 ระดับความแรง (`+10/20/30%` ภายใต้เพดานกลาง `+40%`) ลดเกณฑ์ค้นพบทักษะ `25/40/60%`, มีลางบอก (`ev_talent_hint`) ก่อนเปิดเผย, และข้อจำกัด 8 ชนิด (เช่น `lim_slow_learner`, `lim_stage_fright`) ที่รักษาหายผ่านกิจวัตร/คอร์สเรียน (`advanceLimitationCureProgress`)
+  - **ระบบเรียนไทย GPA, รด. & Second-Chance (`education.ts`):** ประเภทโรงเรียน 4 ระดับ (ย้ายได้เฉพาะ มี.ค.–เม.ย.), แผนการเรียน ม.ปลาย 4 สาย (`arts_lang` / `arts_fine` เปิดทักษะตรงสายทันที), เกรดเฉลี่ยปลายเทอม (ต.ค./มี.ค.) + ติด ร. (`GPA < 1.50`) + ตัดทุนเมื่อต่ำกว่าเกณฑ์, รด. 3 ปี, กศน. ม.ต้น/ม.ปลาย (`nfe_lower`/`nfe_upper` เทียบเท่าในระบบ) และมหาวิทยาลัยเปิด, พร้อมการ์ด T3 วิกฤต ม.3 (`ev_dropout_crisis`) ตัวเลือกปกติ 5 ข้อ + ตัวเลือกพิเศษตามเงื่อนไข 4 ข้อ

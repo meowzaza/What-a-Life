@@ -91,13 +91,14 @@ export function MainGameScreen({
   const prevAgeRef = useRef(state.character.ageYears);
   const prevCashRef = useRef(state.economy.cash);
   const deltaIdRef = useRef(1);
+  const noticeIdRef = useRef(1);
   const lastPromptRealMsRef = useRef<number | null>(null);
 
   const showNotice = useCallback((nextNotice: Omit<NonBlockingNotice, 'id'>, durationMs = 2800) => {
     if (noticeTimerRef.current !== null) {
       window.clearTimeout(noticeTimerRef.current);
     }
-    const id = Date.now() + Math.floor(Math.random() * 100);
+    const id = Date.now() * 1000 + (noticeIdRef.current++ % 1000);
     setNotice({ ...nextNotice, id });
     noticeTimerRef.current = window.setTimeout(() => {
       setNotice(null);
@@ -609,6 +610,7 @@ export function MainGameScreen({
                   state={state}
                   onSelectExplain={setSelectedExplainKey}
                   onDispatch={handleDispatch}
+                  onNavigateJournal={() => setActiveTab('journal')}
                 />
               )}
             </motion.div>

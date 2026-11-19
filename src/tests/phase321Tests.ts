@@ -134,12 +134,19 @@ function test3_SkillStaircaseCeilingsAndSocialNoSoftLock() {
     atAge: { targetAge: 22, education: 'bachelor', wealthFocus: 'comfortable' },
   });
 
-  // 3A. Self-study at level 29 cannot pass 30 without Tier 2 course
+  // 3A. Self-study at Lv.2 full XP bar stops strictly at Lv.2 (compat 39) without Tier 2 course
   state = {
     ...state,
     character: {
       ...state.character,
-      skills: { ...state.character.skills, tech: 29 },
+      skills: { ...state.character.skills, tech: 38 },
+    },
+    skillTraining: {
+      ...state.skillTraining!,
+      skillStates: {
+        ...state.skillTraining!.skillStates!,
+        tech: { level: 2, xp: 295, unlockedTier: 1, certificates: [] },
+      },
     },
     economy: { ...state.economy, jobId: 'unemployed', cash: 20000 },
     timeAllocation: {
@@ -157,33 +164,49 @@ function test3_SkillStaircaseCeilingsAndSocialNoSoftLock() {
   for (let w = 0; w < 6; w++) {
     state = applyWeeklySkillTraining(state, false);
   }
-  assert.equal(state.character.skills.tech, 30, 'Self-study must cap strictly at 30 without active course');
+  assert.equal(state.skillTraining?.skillStates?.tech?.level, 2, 'Self-study must cap strictly at Lv.2 without active course');
+  assert.equal(state.character.skills.tech, 39, 'Self-study compat score must cap strictly at 39 without Tier 2 unlock');
 
-  // 3B. Enrolling in Tier 2 course unlocks 30-59; level 59 stops at 60 without real-world Tier 3 job
+  // 3B. Enrolling in standard 8-week Tier 2 course unlocks Lv.4 (compat 79); Lv.4 full stops at 79 without real-world Tier 3 job
   const enroll = dispatchPlayerAction(state, {
     type: 'ENROLL_SKILL_COURSE',
     skillId: 'tech',
-    weeks: 4,
+    weeks: 8,
   });
-  assert.equal(enroll.accepted, true, 'Adult with sufficient cash can enroll in Tier 2 course');
+  assert.equal(enroll.accepted, true, 'Adult with sufficient cash can enroll in standard 8-week Tier 2 course');
   state = {
     ...enroll.state,
     character: {
       ...enroll.state.character,
-      skills: { ...enroll.state.character.skills, tech: 59 },
+      skills: { ...enroll.state.character.skills, tech: 78 },
+    },
+    skillTraining: {
+      ...enroll.state.skillTraining!,
+      skillStates: {
+        ...enroll.state.skillTraining!.skillStates!,
+        tech: { level: 4, xp: 1495, unlockedTier: 2, certificates: [] },
+      },
     },
   };
   for (let w = 0; w < 4; w++) {
     state = applyWeeklySkillTraining(state, false);
   }
-  assert.equal(state.character.skills.tech, 60, 'Course without real-world job must cap strictly at 60');
+  assert.equal(state.skillTraining?.skillStates?.tech?.level, 4, 'Course without real-world job must cap strictly at Lv.4');
+  assert.equal(state.character.skills.tech, 79, 'Course without real-world job compat score must cap strictly at 79');
 
-  // 3C. Socializing unlocks Tier 3 (>=60) via >=10h/wk social for 8 weeks without needing a job
+  // 3C. Social unlocks Tier 3 (Lv.5) via >=10h/wk social for 8 weeks without needing a job
   state = {
     ...state,
     character: {
       ...state.character,
-      skills: { ...state.character.skills, socializing: 60 },
+      skills: { ...state.character.skills, social: 78 },
+    },
+    skillTraining: {
+      ...state.skillTraining!,
+      skillStates: {
+        ...state.skillTraining!.skillStates!,
+        social: { level: 4, xp: 1490, unlockedTier: 2, certificates: [] },
+      },
     },
     timeAllocation: {
       sleep: 56,
@@ -196,16 +219,17 @@ function test3_SkillStaircaseCeilingsAndSocialNoSoftLock() {
       nightlife: 0,
     },
   };
-  state = dispatchPlayerAction(state, { type: 'SET_SKILL_FOCUS', focus: ['socializing'] }).state;
+  state = dispatchPlayerAction(state, { type: 'SET_SKILL_FOCUS', focus: ['social'] }).state;
   for (let w = 0; w < 10; w++) {
     state = applyWeeklySkillTraining(state, false);
   }
+  assert.equal(state.skillTraining?.skillStates?.social?.level, 5, 'Social must reach Lv.5 after >=10h/wk social for 8+ weeks');
   assert.ok(
-    state.character.skills.socializing > 60,
-    `Socializing must unlock Tier 3 (>60) after >=10h/wk for 8 weeks (got ${state.character.skills.socializing})`
+    state.character.skills.social > 79,
+    `Social must unlock Tier 3 (>79) after >=10h/wk for 8 weeks (got ${state.character.skills.social})`
   );
 
-  console.log('PASS [Test 3]: Skill staircase walls (30 / 60) & non-softlocked Tier 3 socializing work accurately');
+  console.log('PASS [Test 3]: Skill staircase walls (Lv.2/Lv.4/Lv.5) & non-softlocked Tier 3 social work accurately');
 }
 
 function test4_DeterminismX1VsX20WithPresetsAndTraining() {
@@ -219,13 +243,13 @@ function test4_DeterminismX1VsX20WithPresetsAndTraining() {
 
   const runActionAtDay = (st: GameState, day: number): GameState => {
     if (day === 2) {
-      return dispatchPlayerAction(st, { type: 'SET_SKILL_FOCUS', focus: ['tech', 'english'] }).state;
+      return dispatchPlayerAction(st, { type: 'SET_SKILL_FOCUS', focus: ['tech', 'business'] }).state;
     }
     if (day === 3) {
       return dispatchPlayerAction(st, { type: 'APPLY_LIFESTYLE_PRESET', presetId: 'skill_grind' }).state;
     }
     if (day === 10 && st.economy.cash >= 500) {
-      return dispatchPlayerAction(st, { type: 'ENROLL_SKILL_COURSE', skillId: 'tech', weeks: 4 }).state;
+      return dispatchPlayerAction(st, { type: 'ENROLL_SKILL_COURSE', skillId: 'tech', weeks: 8 }).state;
     }
     return st;
   };

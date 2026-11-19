@@ -24,7 +24,7 @@ export interface EvaluatedAction {
 
 /**
  * Way 1 of 4-way Trait Effects: Action Filtering + Explain Reason.
- * Example: `self_doubting` locks `public_speaking_stage` unless socializing skill >= 25.
+ * Example: `self_doubting` locks `public_speaking_stage` unless social skill >= 25.
  */
 export function filterAvailableActions(
   state: GameState,

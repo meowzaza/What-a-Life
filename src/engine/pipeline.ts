@@ -1,3 +1,9 @@
+import {
+  EDUCATION_SYSTEM_RULES,
+  SCHOOL_TIERS,
+  SECOND_CHANCE_PROGRAMS,
+} from '../data/education';
+import { STORYLET_CATALOG } from '../data/storylets/catalog';
 import { DEFAULT_TIME_ALLOC_BY_STAGE } from '../data/timeAlloc';
 import { createEmploymentForJob, DEMO_PROMPTS, HOUSINGS, JOBS } from '../data/thaiData';
 import {
@@ -24,13 +30,21 @@ import {
   getRegionCostMultiplier,
   recalculateEconomyDerived,
 } from './economy';
+import {
+  buildAfterM3ChoicePrompt,
+  buildAfterP6SchoolPrompt,
+  buildRotcApplyPrompt,
+  evaluateAcademicTermEnd,
+  isDropoutCrisisEligible,
+  resolvePendingSchoolTransfer,
+} from './education';
 import { generateAnnualFocusDigest } from './digest';
-import { stepEventDirector as runEventDirector } from './director';
+import { fireStorylet, stepEventDirector as runEventDirector } from './director';
 import { decayEvidenceWeekly, recordEvidence, recordJobWeeklyEvidence } from './evidence';
 import { getLifeSubStageId, onBirthdayLifeStageUpdate } from './lifeStage';
 import { appendTimeline, applyEffects, summarizeEffects } from './log';
 import { clamp, nextRandom, round2 } from './rng';
-import { applyWeeklySkillTraining, getEffectiveSkillCap } from './skillTraining';
+import { applyWeeklySkillTraining, grantDailyJobSkillXp } from './skillTraining';
 import { computeLifeIndices } from './stats';
 import {
   applyWeeklyTimeAllocation,
@@ -49,22 +63,29 @@ import {
   sanitizePlannerWithRelockNotice,
   updatePlannerStreaksWeekly,
 } from './planner';
+import { stampTalentSwapWindow } from './talents';
 import { computeReputationViews, hazardModifiers } from './traitEffects';
 import { checkTraitFormation, driftPersonalityYearly } from './traits';
-import type { GameState, PendingEventPrompt, SkillKey } from './types';
+import type { GameState, PendingEventPrompt } from './types';
 
 function onDay(state: GameState): GameState {
-  const af = state.planner?.annualFocus;
-  if (!af?.snapshot || !state.character.isAlive) return state;
+  if (!state.character.isAlive) return state;
+  let next = state;
+  const pendingTransfer = next.character.educationState?.pendingTransfer;
+  if (pendingTransfer && next.date.totalDays >= pendingTransfer.dueDay) {
+    next = resolvePendingSchoolTransfer(next);
+  }
+  const af = next.planner?.annualFocus;
+  if (!af?.snapshot) return next;
   return {
-    ...state,
+    ...next,
     planner: {
-      ...state.planner!,
+      ...next.planner!,
       annualFocus: {
         ...af,
         snapshot: {
           ...af.snapshot,
-          stressSum: round2(af.snapshot.stressSum + state.character.resources.stress),
+          stressSum: round2(af.snapshot.stressSum + next.character.resources.stress),
           stressSamples: af.snapshot.stressSamples + 1,
         },
       },
@@ -110,7 +131,12 @@ function onWeek(state: GameState, recordLogs = true): GameState {
   return next;
 }
 
-function onMonth(state: GameState, recordLogs = true, allowPrompts = true): GameState {
+function onMonth(
+  state: GameState,
+  recordLogs = true,
+  allowPrompts = true,
+  evaluatedMonth?: number
+): GameState {
   const { character, economy } = state;
   const housing = HOUSINGS[economy.housingId];
   const job = JOBS[economy.jobId] ?? JOBS.unemployed;
@@ -168,6 +194,52 @@ function onMonth(state: GameState, recordLogs = true, allowPrompts = true): Game
 
   if (monthEffects.length > 0) {
     next = applyEffects(next, monthEffects, recordLogs);
+  }
+
+  // 2b. ค่าเล่าเรียนสถานศึกษา (จ่ายปีละ 2 งวด: พ.ค. และ พ.ย., อายุ >= 15) และ กศน. รายเดือน
+  if (next.character.ageYears >= 15 && next.character.educationState) {
+    const eduState = next.character.educationState;
+    if (
+      next.economy.jobId === 'student' &&
+      !eduState.hasScholarship &&
+      !eduState.hasStudentLoan &&
+      EDUCATION_SYSTEM_RULES.tuitionPaymentMonths.includes(next.date.month)
+    ) {
+      const tierMeta = SCHOOL_TIERS[eduState.schoolTier];
+      const installmentFee = tierMeta ? Math.round((tierMeta.monthlyFeeThb * 12) / 2) : 0;
+      if (installmentFee > 0 && next.economy.cash >= installmentFee) {
+        const termTag = next.date.month === 5 ? '1/2 (พ.ค.)' : '2/2 (พ.ย.)';
+        next = applyEffects(
+          next,
+          [
+            {
+              type: 'AddMoney',
+              amount: -installmentFee,
+              category: 'living',
+              reason: `ค่าเทอม${tierMeta.labelTh} งวด ${termTag}`,
+            },
+          ],
+          recordLogs
+        );
+      }
+    }
+    if (eduState.secondChanceEnrolled) {
+      const scMeta = SECOND_CHANCE_PROGRAMS[eduState.secondChanceEnrolled];
+      if (scMeta && scMeta.monthlyFeeThb > 0 && next.economy.cash >= scMeta.monthlyFeeThb) {
+        next = applyEffects(
+          next,
+          [
+            {
+              type: 'AddMoney',
+              amount: -scMeta.monthlyFeeThb,
+              category: 'living',
+              reason: `ค่าลงทะเบียนรายเดือน (${scMeta.labelTh})`,
+            },
+          ],
+          recordLogs
+        );
+      }
+    }
   }
 
   // 3. ดอกเบี้ยและผ่อนชำระหนี้ขั้นต่ำ (เพดานดอกเบี้ยไม่เกินยอดกู้เริ่มต้นหลายเท่าตัวแบบไร้เหตุผล)
@@ -255,6 +327,35 @@ function onMonth(state: GameState, recordLogs = true, allowPrompts = true): Game
         pendingAutopilotSituation: rolled.situation,
       };
     }
+  }
+
+  // Phase 3.3.1: สรุปเกรดปลายภาคเมื่อปิดเทอม (ต.ค. = 10, มี.ค. = 3)
+  const monthClosed = evaluatedMonth ?? ((state.date.month + 10) % 12 + 1);
+  if (EDUCATION_SYSTEM_RULES.termEvaluationMonths.includes(monthClosed)) {
+    next = evaluateAcademicTermEnd(next, monthClosed);
+  }
+
+  // Phase 3.3.1-FIX: เปิดหน้าต่างสลับพรสวรรค์ต้นภาคเรียน (พ.ค. / พ.ย.) และรับสมัคร รด. ช่วงเปิดเทอม ม.ปลาย
+  if (EDUCATION_SYSTEM_RULES.tuitionPaymentMonths.includes(next.date.month)) {
+    next = stampTalentSwapWindow(next, `sem_${next.date.yearCE}_${next.date.month}`);
+  }
+  if (
+    allowPrompts &&
+    !next.pendingPrompt &&
+    !inHospital &&
+    (next.date.month === 5 || next.date.month === 6) &&
+    next.economy.jobId === 'student' &&
+    next.character.ageYears >= EDUCATION_SYSTEM_RULES.rotcStartMinAge &&
+    next.character.ageYears <= EDUCATION_SYSTEM_RULES.rotcStartMaxAge &&
+    !next.character.flags?.rotc_prompted &&
+    !next.character.educationState?.rotcEnrolled &&
+    !next.character.educationState?.completedRotc
+  ) {
+    next = {
+      ...next,
+      pendingPrompt: buildRotcApplyPrompt(next),
+      needsPlayer: true,
+    };
   }
 
   if (recordLogs) {
@@ -375,6 +476,10 @@ function onYear(state: GameState, recordLogs = true, allowPrompts = true): GameS
     next = sanitizeTimeAllocation(next, next.timeAllocation, recordLogs).state;
   }
 
+  if (lifeStageUpdate.changedStage) {
+    next = stampTalentSwapWindow(next, `stage_${lifeStageUpdate.nextStageDef.id}_${newAge}`);
+  }
+
   if (recordLogs && lifeStageUpdate.changedStage) {
     next = appendTimeline(next, {
       category: 'milestone',
@@ -424,7 +529,7 @@ function onYear(state: GameState, recordLogs = true, allowPrompts = true): GameS
       character: { ...next.character, education: 'lower_secondary' },
     };
   }
-  if (newAge >= 18 && next.character.education === 'lower_secondary') {
+  if (newAge >= 18 && next.character.education === 'lower_secondary' && next.economy.jobId === 'student') {
     next = {
       ...next,
       character: { ...next.character, education: 'upper_secondary' },
@@ -537,6 +642,49 @@ function onYear(state: GameState, recordLogs = true, allowPrompts = true): GameS
     next = processAnnualHealthCheckupOnBirthday(next, recordLogs);
   }
 
+  // Phase 3.3.1-FIX: จบ ป.6 (อายุ 12) เลือกโรงเรียน ม.ต้น
+  if (
+    newAge === 12 &&
+    next.character.isAlive &&
+    next.economy.jobId === 'student' &&
+    !next.character.flags?.done_after_p6_school &&
+    !next.pendingPrompt &&
+    next.sceneMode?.sceneId !== 'hospital' &&
+    allowPrompts
+  ) {
+    next = {
+      ...next,
+      pendingPrompt: buildAfterP6SchoolPrompt(next),
+      needsPlayer: true,
+    };
+  }
+
+  // Phase 3.3.1-FIX: จบ ม.3 (อายุ 15) ตรวจสิทธิ์วิกฤตครอบครัวก่อน หากไม่เข้าเกณฑ์เปิดเหตุการณ์เลือกสายเรียน ม.ปลาย
+  if (
+    newAge === 15 &&
+    next.character.isAlive &&
+    (state.economy.jobId === 'student' || prevAge === 14) &&
+    !next.pendingPrompt &&
+    next.sceneMode?.sceneId !== 'hospital' &&
+    allowPrompts
+  ) {
+    if (isDropoutCrisisEligible(next) && !next.character.flags?.['storylet_done:ev_dropout_crisis']) {
+      const crisisDef = STORYLET_CATALOG.find((s) => s.id === 'ev_dropout_crisis');
+      if (crisisDef) {
+        next = fireStorylet(next, crisisDef, allowPrompts, {
+          bypassRules: true,
+          sourceReason: 'จบช่วงชั้น ม.3 ท่ามกลางแรงกดดันค่าใช้จ่ายของครอบครัว',
+        }).state;
+      }
+    } else if (next.economy.jobId === 'student' && !next.character.flags?.done_after_m3_choice) {
+      next = {
+        ...next,
+        pendingPrompt: buildAfterM3ChoicePrompt(next),
+        needsPlayer: true,
+      };
+    }
+  }
+
   // Phase 3.2.3: สรุปผลเป้าหมายประจำปีที่ผ่านมา + เปิดเลือกเป้าหมายปีใหม่ (อายุ 13+, ห้ามทับ T3)
   if (newAge >= 13 && next.character.isAlive) {
     const basePlanner = next.planner;
@@ -644,9 +792,25 @@ function stepCalendar(
       timeAllocation: deriveWeeklyAllocation(activeGrid, next),
     };
   }
+  if (adv.nextDate.month === 1 && adv.nextDate.day === 1) {
+    next = stampTalentSwapWindow(next, `newyear_${adv.nextDate.yearCE}`);
+    if (next.character.educationState) {
+      next = {
+        ...next,
+        character: {
+          ...next.character,
+          educationState: {
+            ...next.character.educationState,
+            trackChangeCountThisYear: 0,
+            trackChangeLastYearCE: adv.nextDate.yearCE,
+          },
+        },
+      };
+    }
+  }
   next = onDay(next);
   if (adv.isNewWeek) next = onWeek(next, recordLogs);
-  if (adv.isNewMonth) next = onMonth(next, recordLogs, allowPrompts);
+  if (adv.isNewMonth) next = onMonth(next, recordLogs, allowPrompts, state.date.month);
   if (adv.isNewYear) next = onYear(next, recordLogs, allowPrompts);
   return {
     state: next,
@@ -711,16 +875,6 @@ function stepDailyLife(state: GameState): GameState {
     ? 0
     : Math.round((BASE_MONTHLY_LIVING_COST * regionMult) / 30);
 
-  // การเติบโตของทักษะรายวันจากงาน/เรียน (ต้องอยู่ใต้เพดานขั้นบันได 3 ขั้นของแต่ละทักษะ)
-  const nextSkills = { ...character.skills };
-  for (const [sk, amt] of Object.entries(job.skillGrowthPerDay)) {
-    const key = sk as SkillKey;
-    const cap = getEffectiveSkillCap(state, key);
-    if (nextSkills[key] < cap) {
-      nextSkills[key] = round2(Math.min(cap, nextSkills[key] + (amt ?? 0)));
-    }
-  }
-
   const nextCash = Math.round(economy.cash - dailyLiving);
 
   let finalCash = nextCash;
@@ -742,17 +896,16 @@ function stepDailyLife(state: GameState): GameState {
       stress: nextStress,
       freeTime: nextFreeTime,
     },
-    skills: nextSkills,
   };
 
   nextEconomy = recalculateEconomyDerived(nextCharacter, nextEconomy);
   nextCharacter.indices = computeLifeIndices(nextCharacter, nextEconomy);
 
-  return {
+  return grantDailyJobSkillXp({
     ...state,
     character: nextCharacter,
     economy: nextEconomy,
-  };
+  });
 }
 
 // 2b. วงจรสถานที่ชั่วคราวและการพักฟื้นในโรงพยาบาล (Scene Mode Lifecycle)

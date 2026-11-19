@@ -2,7 +2,13 @@ import { ACTIVITIES_BY_ID } from '../data/activities';
 import { ANNUAL_FOCUS_BY_ID, ANNUAL_FOCUS_CONFIG } from '../data/annualFocus';
 import { AGE_LEGAL_RULES } from '../data/lifeStages';
 import { LIFESTYLE_PRESETS_BY_ID } from '../data/lifestylePresets';
-import { ALL_DAY_TYPES, ALL_SLOTS, DAY_TYPE_WEIGHTS } from '../data/slotHours';
+import {
+  ALL_DAY_TYPES,
+  ALL_SLOTS,
+  DAY_TYPE_WEIGHTS,
+  NIGHT_AWAKE_SLEEP_PENALTY_HOURS,
+  SLOT_HOURS,
+} from '../data/slotHours';
 import { JOBS } from '../data/thaiData';
 import {
   DEFAULT_TIME_ALLOC_BY_STAGE,
@@ -32,8 +38,11 @@ import {
   resolveEmploymentState,
 } from './planner';
 import { clamp, nextRandom, round2 } from './rng';
+import { recordActivitySkillTagProgress } from './skillTraining';
+import { advanceLimitationCureProgress } from './talents';
 import type {
   ActivityId,
+  ActivitySkillTagId,
   Effect,
   GameState,
   LifestylePresetId,
@@ -874,5 +883,87 @@ export function applyWeeklyTimeAllocation(state: GameState, recordLogs = true): 
   }
 
   next = recordEvidenceBatch(next, evidenceBatch, { reason: 'จัดสรรเวลาประจำสัปดาห์' });
+
+  // Phase 3.3.1: Track activity skill tags for hidden skill discovery & advance limitation cure progress
+  if (next.planner?.grid) {
+    const swapLookup = new Map<string, ActivityId>();
+    for (const sw of costRes?.swappedSlots ?? []) {
+      swapLookup.set(`${sw.dayType}:${sw.slot}`, sw.toActivityId);
+    }
+    const tagUsage = new Map<ActivitySkillTagId, { sessions: number; hours: number }>();
+    let workoutHours = 0;
+    let craftOrCookHours = 0;
+    let restHours = 0;
+
+    for (const dayType of ALL_DAY_TYPES) {
+      const w = DAY_TYPE_WEIGHTS[dayType];
+      for (const slot of ALL_SLOTS) {
+        if (isSlotLocked(dayType, slot, next).locked) continue;
+        const effectiveActId =
+          swapLookup.get(`${dayType}:${slot}`) ??
+          resolveEffectiveSlotActivityId(next.planner.grid, dayType, slot, next);
+        const def = ACTIVITIES_BY_ID.get(effectiveActId);
+        if (!def) continue;
+        const slotHrs =
+          (slot === 'night'
+            ? SLOT_HOURS.night + NIGHT_AWAKE_SLEEP_PENALTY_HOURS
+            : SLOT_HOURS[slot]) * w;
+
+        if (effectiveActId === 'workout' || effectiveActId === 'advanced_competition') {
+          workoutHours += slotHrs;
+        }
+        if (effectiveActId === 'quiet_rest' || effectiveActId === 'health_check_rest') {
+          restHours += slotHrs;
+        }
+
+        const customTag =
+          next.planner.activitySkillTags?.[
+            effectiveActId as keyof NonNullable<typeof next.planner.activitySkillTags>
+          ];
+        const activeTag = customTag ?? def.defaultSkillTags?.[0];
+        if (activeTag) {
+          if (activeTag === 'tag_make' || activeTag === 'tag_cook') {
+            craftOrCookHours += slotHrs;
+          }
+          const prev = tagUsage.get(activeTag) ?? { sessions: 0, hours: 0 };
+          tagUsage.set(activeTag, {
+            sessions: prev.sessions + w,
+            hours: prev.hours + slotHrs,
+          });
+        }
+      }
+    }
+
+    for (const [tagId, usage] of tagUsage.entries()) {
+      next = recordActivitySkillTagProgress(
+        next,
+        tagId,
+        usage.sessions,
+        usage.hours,
+        recordLogs
+      );
+    }
+
+    next = advanceLimitationCureProgress(next, {
+      selfDevHours: alloc.selfDev,
+      sleepHours: alloc.sleep,
+      socialHours: alloc.social,
+      workoutHours,
+      craftOrCookPracticeHours: craftOrCookHours,
+      restHours,
+      hasActiveCourse: Boolean(next.skillTraining?.course && next.skillTraining.course.weeksLeft > 0),
+    });
+  } else {
+    next = advanceLimitationCureProgress(next, {
+      selfDevHours: alloc.selfDev,
+      sleepHours: alloc.sleep,
+      socialHours: alloc.social,
+      workoutHours: 0,
+      craftOrCookPracticeHours: 0,
+      restHours: alloc.hobby * 0.4,
+      hasActiveCourse: Boolean(next.skillTraining?.course && next.skillTraining.course.weeksLeft > 0),
+    });
+  }
+
   return next;
 }

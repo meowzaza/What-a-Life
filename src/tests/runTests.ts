@@ -170,7 +170,9 @@ function testEconomyCeilingsAndCosts() {
   assert.equal(focusRes.accepted, true);
   assert.deepEqual(focusRes.state.skillTraining?.focus, ['tech']);
   if (prevCash >= 500) {
-    const enrollRes = dispatchPlayerAction(focusRes.state, { type: 'ENROLL_SKILL_COURSE', skillId: 'tech', weeks: 4 });
+    const legacyReject = dispatchPlayerAction(focusRes.state, { type: 'ENROLL_SKILL_COURSE', skillId: 'tech', weeks: 4 });
+    assert.equal(legacyReject.accepted, false, 'Legacy 4-week course duration must be rejected under 3.3.1-FIX');
+    const enrollRes = dispatchPlayerAction(focusRes.state, { type: 'ENROLL_SKILL_COURSE', skillId: 'tech', weeks: 8 });
     assert.equal(enrollRes.accepted, true);
     assert.equal(enrollRes.state.economy.cash, prevCash - 500, 'Enrolling in course must deduct week-1 fee upfront');
   }
@@ -1469,12 +1471,12 @@ function testPhase2TraitFourWayEffects() {
     atAge: { targetAge: 24, education: 'bachelor', wealthFocus: 'average' },
   });
 
-  // 1. Action Gating: self_doubting (clear) locks public_speaking_stage; socializing >= 25 overrides it
+  // 1. Action Gating: self_doubting (clear) locks public_speaking_stage; social >= 25 overrides it
   const doubtingState = {
     ...base,
     character: {
       ...base.character,
-      skills: { ...base.character.skills, socializing: 10 },
+      skills: { ...base.character.skills, social: 10 },
       emergentTraits: [
         {
           id: 'self_doubting',
@@ -1498,11 +1500,11 @@ function testPhase2TraitFourWayEffects() {
     ...doubtingState,
     character: {
       ...doubtingState.character,
-      skills: { ...doubtingState.character.skills, socializing: 28 },
+      skills: { ...doubtingState.character.skills, social: 28 },
     },
   };
   const unlockedEval = filterAvailableActions(skilledState).find((a) => a.action.id === 'public_speaking_stage')!;
-  assert.equal(unlockedEval.available, true, 'socializing >= 25 must unlock public_speaking_stage');
+  assert.equal(unlockedEval.available, true, 'social >= 25 must unlock public_speaking_stage');
 
   // 2. Hazard Modifiers
   const riskyState = {
@@ -2128,7 +2130,7 @@ function testAppearanceAndStatGameplayImpact() {
     ...base.character,
     ageYears: 26,
     rawStats: { ...base.character.rawStats, reliability: 65, charisma: 68, looks: 72 },
-    skills: { ...base.character.skills, academic: 35, sales: 35, socializing: 30 },
+    skills: { ...base.character.skills, academic: 35, business: 35, social: 30 },
     indices: { ...base.character.indices, competence: 70 },
     flags: {},
     appearance: {
@@ -2163,7 +2165,7 @@ function testAppearanceAndStatGameplayImpact() {
     ...officeChar,
     ageYears: 28,
     rawStats: { ...officeChar.rawStats, charisma: 32, looks: 30, reliability: 60 },
-    skills: { ...officeChar.skills, sales: 50, socializing: 45 },
+    skills: { ...officeChar.skills, business: 50, social: 45 },
     indices: { ...officeChar.indices, competence: 72 },
   };
   const salesBlocked = checkJobEligibility(lowCharisma, 'sales_exec');

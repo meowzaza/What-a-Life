@@ -1,6 +1,6 @@
 # SCHEMAS.md — โครงสร้างข้อมูลและชนิดตัวแปรหลัก (Core Type Reference)
 
-> **สำคัญ:** ไฟล์โค้ด `src/engine/types.ts` คือแหล่งความจริงสูงสุด (Single Source of Truth) เอกสารนี้สรุปโครงสร้างหลักตั้งแต่ **Phase 1 ถึง Phase 3.2.3-P1** (ที่มีในโค้ดแล้ว) ส่วน **§4 เป็นชนิดข้อมูล "แผน" ของ Phase 3.3.x ที่ยังไม่มีในโค้ด** เพื่อให้ AI ดูภาพรวมอย่างรวดเร็วโดยไม่ต้องเปิดอ่านไฟล์โค้ดทั้งหมด
+> **สำคัญ:** ไฟล์โค้ด `src/engine/types.ts` คือแหล่งความจริงสูงสุด (Single Source of Truth) เอกสารนี้สรุปโครงสร้างหลักตั้งแต่ **Phase 1 ถึง Phase 3.3.1** (ที่มีในโค้ดแล้ว) ส่วนใน **§4 รายการที่ยังไม่มีป้าย `[ทำแล้ว · 3.3.1]` เป็นชนิดข้อมูล "แผน" ของ Phase 3.3.2–3.3.3 ที่ยังไม่มีในโค้ด** เพื่อให้ AI ดูภาพรวมอย่างรวดเร็วโดยไม่ต้องเปิดอ่านไฟล์โค้ดทั้งหมด
 
 ---
 
@@ -67,27 +67,27 @@ export interface StandingOrders {
 
 ---
 
-## 4. ชนิดข้อมูล "แผน" ของระบบทักษะ 2 ชั้น, การศึกษาไทย TCAS, เควสแตกแขนง และฉายา (`Phase 3.3.1–3.3.3` ยังไม่มีในโค้ด)
+## 4. โครงสร้างระบบทักษะ 2 ชั้น, การศึกษาไทย (`Phase 3.3.1` `[ทำแล้ว · 3.3.1]`) และแผน `Phase 3.3.2–3.3.3`
 
-> **สถานะ: แผน (ไม่ใช่โค้ดจริง)** ทุกชนิดด้านล่างติดป้ายแท็ก Phase ที่จะทำ พอทำโค้ดแล้วให้ `types.ts` เป็นแหล่งความจริงแทนและเปลี่ยนป้ายเป็น `[ทำแล้ว · x]`
+> **สถานะ:** ชนิดข้อมูล `CoreSkillId`, `DiscoveredSkillId`, `SkillKey`, `EducationLevel`, `EducationState`, `Talent` `[ทำแล้ว · 3.3.1]` มีจริงใน `src/engine/types.ts` แล้ว ส่วนโครงสร้างของ `Phase 3.3.2–3.3.3` ด้านล่างยังคงเป็น **(แผน)** จนกว่าจะทำโค้ด
 
 ```ts
-// ทักษะหลัก 6 ด้าน (เห็นตั้งแต่ต้น)
-export type CoreSkillId = 'academic' | 'tech' | 'business' | 'social' | 'athletics' | 'craft';
+// [ทำแล้ว · 3.3.1] ทักษะหลัก 6 ด้าน (เห็นตั้งแต่ต้น)
+export type CoreSkillId = 'academic' | 'tech' | 'craft' | 'social' | 'business' | 'athletics';
 
-// ทักษะเฉพาะทางที่ค้นพบได้ 7 ด้าน (ซ่อนไว้จนกว่าจะปลดล็อกผ่านกิจกรรม/ชมรม/สายการเรียน)
+// [ทำแล้ว · 3.3.1] ทักษะเฉพาะทางที่ค้นพบได้ 7 ด้าน (ซ่อนไว้จนกว่าจะปลดล็อกผ่านแท็กกิจกรรม/ชมรม/สายการเรียน)
 export type DiscoveredSkillId =
+  | 'foreign_lang'
+  | 'culinary'
   | 'visual_arts'
   | 'music_vocal'
   | 'performing_acting'
   | 'dance_thai_modern'
-  | 'culinary'
-  | 'foreign_lang'
   | 'literature_writing';
 
-export type SkillId = CoreSkillId | DiscoveredSkillId;
+export type SkillKey = CoreSkillId | DiscoveredSkillId;
 
-// สถานะการศึกษาและ TCAS
+// [ทำแล้ว · 3.3.1] สถานะการศึกษา (ฟิลด์ universityId/facultyId/majorId/tcasExamScore รองรับล่วงหน้าสำหรับ 3.3.2)
 export type EducationLevel =
   | 'none' | 'primary' | 'lower_secondary' | 'upper_secondary'
   | 'vocational' | 'nfe_lower' | 'nfe_upper'
@@ -97,16 +97,38 @@ export interface EducationState {
   level: EducationLevel;
   schoolTier: 'school_temple' | 'school_public' | 'school_private' | 'school_international';
   highSchoolTrack?: 'sci_math' | 'arts_math' | 'arts_lang' | 'arts_fine';
-  universityId?: string;              // 1 ใน 7 สถาบันอุดมศึกษาเฉพาะทาง
+  fineArtSkill?: DiscoveredSkillId;
+  universityId?: string;              // รอเชื่อมสถาบันใน 3.3.2
   facultyId?: string;
   majorId?: string;
   currentGpa: number;                 // 0.00 - 4.00
   cumulativeGpa: number;
+  termCount?: number;
   scholarshipMinGpa?: number | null;  // หากมีทุนและเกรดต่ำกว่าค่านี้จะหลุดทุน
+  hasScholarship?: boolean;
   hasStudentLoan: boolean;            // กยศ.
   completedRotc: boolean;             // เรียนจบ รด. 3 ปี (ยกเว้นเกณฑ์ทหารตอนอายุ 21)
-  tcasExamScore?: number | null;      // คะแนนสอบกลาง (0 - 100)
+  rotcEnrolled?: boolean;
+  rotcYearsCompleted?: number;
+  remedialDue?: boolean;
+  secondChanceEnrolled?: 'nfe_lower' | 'nfe_upper' | 'uni_open_evening' | null;
+  secondChanceProgressTerms?: number;
+  tcasExamScore?: number | null;      // รอระบบสอบกลางใน 3.3.2
 }
+
+// [ใหม่ · 3.3.1-FIX] ระบบเลเวลทักษะ 1–5 (สเปก 05 §2)
+export type SkillTierId = 1 | 2 | 3;  // 1 ฝึกเอง (≤Lv2) · 2 ลงคอร์ส (≤Lv4) · 3 สนามจริง (Lv5)
+export interface SkillLevelState {
+  level: 1 | 2 | 3 | 4 | 5;
+  xp: number;                 // XP ในแถบเลเวลปัจจุบัน
+  unlockedTier: SkillTierId;  // เก็บถาวร ห้ามผูกกับคอร์สที่กำลังเรียน
+  discoveredHours: number;    // ชั่วโมงสะสมเพื่อค้นพบ (ทักษะค้นพบ)
+  certificates: string[];     // ใบประกาศจากคอร์ส
+}
+export interface CourseEnrollment { skillId: string; weeksLeft: number; missedWeeks: number; feePaid: number; }  // คอร์ส 8 สัปดาห์ 4,000 บาท
+export interface GpaTermRecord { termId: string; gpa: number; gpax: number; parts: Record<string, number>; }  // ประวัติเกรดรายเทอม
+export type ReadinessLevel = 'ready' | 'risky' | 'very_risky';  // ความพร้อมสายเรียน
+export interface LifeHistoryEntry { ageMonths: number; kind: string; textKey: string; }  // ประวัติชีวิตเฉพาะจุดใหญ่ แสดงล่าสุด 8 รายการ
 
 // โครงสร้างเควสเนื้อเรื่องแบบแตกแขนง (ตาม CORE_BLUEPRINTS.md §2)
 export interface ActiveQuestState {
@@ -130,17 +152,21 @@ export interface CharacterTitle {
 
 ### 4.1 ชนิดข้อมูลที่เพิ่มเข้าแผน (ป้าย `[ใหม่ · 3.3.x]`)
 ```ts
-// [อัปเดต · 3.3.1] แทน hiddenAptitudes แบบเดิม (ดู CORE §10, catalogs/talents.md)
+// [ทำแล้ว · 3.3.1] แทน hiddenAptitudes แบบเดิม (ดู src/data/talents.ts, src/engine/talents.ts)
+export type TalentKind = 'skill' | 'personality' | 'genius' | 'limitation' | 'special';
+export type TalentTier = 1 | 2 | 3;
 export interface Talent {
-  id: string;                         // รหัสใน catalogs/talents.md
-  kind: 'skill' | 'personality' | 'genius' | 'limitation';
-  tier: 1 | 2 | 3;                    // เล็ก / กลาง / ใหญ่
+  id: string;                         // รหัสใน src/data/talents.ts
+  kind: TalentKind;
+  tier: TalentTier;                   // เล็ก (+10%) / กลาง (+20%) / ใหญ่ (+30%)
   revealed: boolean;                  // ยังไม่เปิดเผย = เห็นแค่ลางบอก
   acquiredAtAge: number;              // 0 = ตั้งแต่เกิด
   source: 'birth' | 'gacha' | 'event';
-  fixableBy?: string[];               // สำหรับ limitation: ตัวแก้ เช่น 'tutor' | 'hard_study'
+  fixableBy?: string[];               // สำหรับ limitation: ตัวแก้ เช่น 'hard_study' | 'tutor' | 'course'
+  curedAtAge?: number;
+  hintShownCount?: number;
 }
-export interface TalentSlots { owned: Talent[]; vault: Talent[]; vaultMax: 5; }  // [ใหม่ · 3.3.3] lot กาชาเก็บได้ไม่เกิน 5
+export interface TalentSlots { active: Talent[]; vault: Talent[]; activeMax: 3; vaultMax: 5; lastRevealAgeMonths: number; lastRevealLifeStage: LifeStage; }  // [อัปเดต · 3.3.1-FIX] ใช้งาน 3 ช่อง + lot 5 ค้นพบห่าง ≥ 36 เดือนเกม
 
 // [ใหม่ · 3.3.2] เควสระดับ Q และเลน (CORE §8)
 export type QuestLevel = 'Q-S' | 'Q-M' | 'Q-L' | 'Q-C';

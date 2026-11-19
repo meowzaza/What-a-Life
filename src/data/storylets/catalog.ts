@@ -1,4 +1,5 @@
 import { filterValidatedStorylets, type StoryletDef } from '../../engine/storylet';
+import { AGE_AND_EDU_STORYLETS } from './ageAndEduStorylets';
 import { PLANNER_STORYLETS } from './plannerStorylets';
 
 /**
@@ -196,7 +197,7 @@ export const RAW_STORYLET_CATALOG: StoryletDef[] = [
     id: 't1_parents_warm_dinner',
     title: 'มื้อเย็นฝีมือคนที่บ้าน',
     bodyTemplate:
-      'กลับถึงบ้านในจ.{province} ก็ได้กลิ่นกับข้าวร้อนๆ เมนูโปรดตั้งรออยู่บนโต๊ะอาหาร พร้อมเสียงไถ่ถามสารทุกข์สุกดิบจากคนในบ้าน',
+      'กลับถึงบ้านหลังเลิกเรียนหรือเลิกงาน ก็ได้กลิ่นกับข้าวร้อนๆ เมนูโปรดตั้งรออยู่บนโต๊ะอาหาร พร้อมเสียงไถ่ถามสารทุกข์สุกดิบจากคนในบ้าน',
     category: 'family',
     tier: 'T1',
     sourceHint: 'general',
@@ -260,6 +261,7 @@ export const RAW_STORYLET_CATALOG: StoryletDef[] = [
         label: 'เก็บไว้โชว์ที่บ้าน',
         effects: [
           { type: 'ChangeSkill', skill: 'academic', delta: 1, reason: 'มั่นใจในบทเรียนมากขึ้น' },
+          { type: 'ModifyTeacherGpa', delta: 0.1, reason: 'ได้รับคำชมจากคุณครูประจำชั้น' },
           { type: 'RecordEvidence', key: 'praised', amount: 2, reason: 'ได้รับคำชมจากคุณครู' },
         ],
       },
@@ -301,7 +303,7 @@ export const RAW_STORYLET_CATALOG: StoryletDef[] = [
     category: 'social',
     tier: 'T2',
     sourceHint: 'calendar',
-    conditions: { minAge: 7, maxAge: 12, stages: ['school_kid'] },
+    conditions: { minAge: 7, maxAge: 12, stages: ['school_kid'], isMinorSafe: true },
     sceneTag: 'school',
     importance: 6,
     choices: [
@@ -327,7 +329,7 @@ export const RAW_STORYLET_CATALOG: StoryletDef[] = [
         label: 'ขอช่วยอยู่กองเชียร์และแจกน้ำข้างสนาม',
         description: 'ช่วยเพื่อนเท่าที่สบายใจ',
         effects: [
-          { type: 'ChangeSkill', skill: 'socializing', delta: 1, reason: 'คุยเล่นกับเพื่อนบนอัฒจันทร์' },
+          { type: 'ChangeSkill', skill: 'social', delta: 1, reason: 'คุยเล่นกับเพื่อนบนอัฒจันทร์' },
           { type: 'RecordEvidence', key: 'help_others', amount: 1.5, reason: 'ช่วยเตรียมน้ำให้เพื่อน' },
         ],
       },
@@ -358,7 +360,7 @@ export const RAW_STORYLET_CATALOG: StoryletDef[] = [
         label: 'เขียนโน้ตตอบขอบคุณกลับอย่างสุภาพ',
         effects: [
           { type: 'ChangeResource', resource: 'stress', delta: -6, reason: 'ใจฟูกับความรู้สึกดีวัยเรียน' },
-          { type: 'ChangeSkill', skill: 'socializing', delta: 1.5, reason: 'เปิดใจสื่อสารอย่างสุภาพ' },
+          { type: 'ChangeSkill', skill: 'social', delta: 1.5, reason: 'เปิดใจสื่อสารอย่างสุภาพ' },
           { type: 'RecordEvidence', key: 'social_fun', amount: 1.5, reason: 'พูดคุยอย่างอบอุ่นกับเพื่อน' },
         ],
       },
@@ -383,7 +385,7 @@ export const RAW_STORYLET_CATALOG: StoryletDef[] = [
     category: 'social',
     tier: 'T2',
     sourceHint: 'general',
-    conditions: { minAge: 13, maxAge: 17, stages: ['teen'] },
+    conditions: { minAge: 15, maxAge: 17, stages: ['teen'], isMinorSafe: true },
     sceneTag: 'district',
     daypart: 'afternoon',
     importance: 6,
@@ -432,7 +434,7 @@ export const RAW_STORYLET_CATALOG: StoryletDef[] = [
         effects: [
           { type: 'ChangeMoney', amount: -500, category: 'event', reason: 'แชร์ค่ามื้อค่ำ' },
           { type: 'ChangeResource', resource: 'stress', delta: -8, reason: 'ผ่อนคลายกับบทสนทนาที่ดี' },
-          { type: 'ChangeSkill', skill: 'socializing', delta: 1.5, reason: 'สานสัมพันธ์ระหว่างมื้อค่ำ' },
+          { type: 'ChangeSkill', skill: 'social', delta: 1.5, reason: 'สานสัมพันธ์ระหว่างมื้อค่ำ' },
         ],
       },
       {
@@ -983,7 +985,7 @@ export const RAW_STORYLET_CATALOG: StoryletDef[] = [
         id: 'lead_club',
         label: 'ตอบรับเป็นแกนนำชุมชน แบ่งปันประสบการณ์',
         effects: [
-          { type: 'ChangeSkill', skill: 'socializing', delta: 2, reason: 'นำกิจกรรมชมรมชุมชน' },
+          { type: 'ChangeSkill', skill: 'social', delta: 2, reason: 'นำกิจกรรมชมรมชุมชน' },
           { type: 'ChangeResource', resource: 'stress', delta: -8, reason: 'ภูมิใจที่ได้มีบทบาทในสังคม' },
           { type: 'RecordEvidence', key: 'help_others', amount: 2, reason: 'ช่วยงานชุมชนอย่างเต็มใจ' },
         ],
@@ -1008,7 +1010,7 @@ export const RAW_STORYLET_CATALOG: StoryletDef[] = [
     category: 'quirky',
     tier: 'T2',
     sourceHint: 'general',
-    conditions: { minAge: 10 },
+    conditions: { minAge: 15 },
     sceneTag: 'home',
     importance: 6,
     choices: [
@@ -1050,7 +1052,7 @@ export const RAW_STORYLET_CATALOG: StoryletDef[] = [
     category: 'quirky',
     tier: 'T2',
     sourceHint: 'general',
-    conditions: { minAge: 14 },
+    conditions: { minAge: 15 },
     sceneId: 'street_shops',
     daypart: 'evening',
     importance: 6,
@@ -1166,6 +1168,7 @@ export const RAW_STORYLET_CATALOG: StoryletDef[] = [
         id: 'private_hospital_fast',
         label: 'ผ่าตัดส่องกล้องห้องพิเศษเอกชน (-18,000 บ. · พัก 3 วัน)',
         description: 'ฟื้นตัวไวและเจ็บตัวน้อยกว่า นอนโรงพยาบาลเพียง 3 วันแล้วหายขาดแน่นอน',
+        requiresAdult: true,
         costCash: 18000,
         effects: [
           { type: 'ChangeMoney', amount: -18000, category: 'living', reason: 'ค่ารักษาผ่าตัดส่องกล้องห้องพิเศษ' },
@@ -1538,7 +1541,7 @@ export const RAW_STORYLET_CATALOG: StoryletDef[] = [
         label: 'แลกคอนแทกต์ไว้ต่อยอดสายงานประจำของตัวเอง',
         description: 'ไม่เสียจังหวะงานหลัก แต่ได้คอนเนกชันเพิ่มในวงการสื่อ',
         effects: [
-          { type: 'ChangeSkill', skill: 'socializing', delta: 2, reason: 'ขยายเครือข่ายรู้จักคนในวงการ' },
+          { type: 'ChangeSkill', skill: 'social', delta: 2, reason: 'ขยายเครือข่ายรู้จักคนในวงการ' },
           { type: 'ChangeRawStat', stat: 'creativity', delta: 2, reason: 'ได้มุมมองงานสื่อสารใหม่ๆ' },
         ],
       },
@@ -1621,7 +1624,7 @@ export const RAW_STORYLET_CATALOG: StoryletDef[] = [
         effects: [
           { type: 'ChangeMoney', amount: -1800, category: 'living', reason: 'ค่าอบรมฝึกการสื่อสารและบุคลิกภาพ' },
           { type: 'ChangeRawStat', stat: 'charisma', delta: 6, reason: 'ฝึกจังหวะพูดและการสบตาอย่างเป็นระบบ' },
-          { type: 'ChangeSkill', skill: 'socializing', delta: 4, reason: 'กล้าเข้าสังคมและพูดคุยคล่องขึ้น' },
+          { type: 'ChangeSkill', skill: 'social', delta: 4, reason: 'กล้าเข้าสังคมและพูดคุยคล่องขึ้น' },
           { type: 'RecordEvidence', key: 'practice_any', amount: 2, reason: 'ลงทุนพัฒนาจุดอ่อนของตัวเอง' },
         ],
       },
@@ -1712,7 +1715,196 @@ export const RAW_STORYLET_CATALOG: StoryletDef[] = [
     weight: 8,
     cooldownYears: 2,
   },
+  // === Phase 3.3.1: Talents, Fixable Limitations & M.3 Dropout Crisis ===
+  {
+    id: 'ev_talent_hint',
+    title: 'สังเกตเห็นแววบางอย่างในชีวิตประจำวัน',
+    bodyTemplate:
+      'ช่วงนี้คนรอบตัวทักเบาๆ ว่าเวลา {firstName} ได้ลองจับงานหรือกิจกรรมที่ถูกจริต มักจับจังหวะได้ไวกว่าปกติเป็นพิเศษ ลองเปิดโอกาสให้ตัวเองได้ลองหลายแนวทางดูสักหน่อย',
+    category: 'quirky',
+    tier: 'T1',
+    sourceHint: 'general',
+    sceneId: 'school_public',
+    importance: 5,
+    conditions: {
+      minAge: 6,
+      maxAge: 18,
+      requireUnrevealedTalent: true,
+      isMinorSafe: true,
+    },
+    choices: [
+      {
+        id: 'notice_subtle_spark',
+        label: 'เก็บคำชมและลองสังเกตความถนัดของตัวเองต่อไป',
+        effects: [
+          { type: 'ChangeRawStat', stat: 'wit', delta: 0.8, reason: 'เริ่มสังเกตความถนัดธรรมชาติของตัวเอง' },
+          { type: 'RecordEvidence', key: 'practice_any', amount: 1.5, reason: 'อยากลองทำกิจกรรมที่สนใจต่อเนื่อง' },
+          { type: 'AddFlag', flag: 'talent_hint_noticed', value: true, reason: 'เริ่มจับสังเกตแววความถนัดเฉพาะตัว' },
+        ],
+      },
+    ],
+    weight: 10,
+    cooldownYears: 1,
+  },
+  {
+    id: 'ev_ms_slow_learner_tutor',
+    title: 'ครูประจำชั้นช่วยทบทวนบทเรียนหลังเลิกเรียน',
+    bodyTemplate:
+      'ครูสังเกตว่า {firstName} ต้องใช้เวลาทำความเข้าใจเรื่องใหม่นานกว่าเพื่อนจึงไม่เร่งรัด แต่ชวนมานั่งอธิบายทีละขั้นอย่างใจเย็นจนเริ่มมองเห็นภาพรวมชัดขึ้น',
+    category: 'social',
+    tier: 'T1',
+    sourceHint: 'general',
+    sceneId: 'school_public',
+    importance: 5,
+    conditions: {
+      minAge: 12,
+      maxAge: 18,
+      requireLimitationId: 'lim_slow_learner',
+      jobIds: ['student'],
+      isMinorSafe: true,
+    },
+    choices: [
+      {
+        id: 'stay_after_class_tutor',
+        label: 'ตั้งใจฟังและจดสรุปตามวิธีของตัวเอง',
+        effects: [
+          { type: 'ChangeSkill', skill: 'academic', delta: 1.5, reason: 'ทบทวนเนื้อหาทีละขั้นอย่างใจเย็น' },
+          { type: 'ChangeResource', resource: 'stress', delta: -3, reason: 'ไม่รู้สึกถูกกดดันเวลาต้องทำความเข้าใจช้ากว่าเพื่อน' },
+          { type: 'RecordEvidence', key: 'self_discipline', amount: 1.5, reason: 'อดทนทบทวนบทเรียนจนเข้าใจ' },
+        ],
+      },
+    ],
+    weight: 9,
+    cooldownYears: 1,
+  },
+  {
+    id: 'ev_dropout_crisis',
+    title: 'หัวเลี้ยวหัวต่อ ม.3: ไปต่อสายไหนดีเมื่อบ้านเริ่มตึงมือ',
+    bodyTemplate:
+      'ใกล้จบชั้น ม.3 แล้ว แต่ค่าใช้จ่ายในบ้านของ {firstName} ช่วงนี้ตึงตัวกว่าที่คิด ทั้งครอบครัวต้องมานั่งคุยกันจริงจังว่าจะวางแผนก้าวต่อไปอย่างไรดี',
+    category: 'family',
+    tier: 'T3',
+    sourceHint: 'calendar',
+    sceneTag: 'home',
+    importance: 10,
+    isOneOff: true,
+    conditions: {
+      minAge: 14,
+      maxAge: 16,
+      isMinorSafe: true,
+      requireDropoutCrisisEligible: true,
+    },
+    choices: [
+      {
+        id: 'stay_highschool_tight',
+        label: 'กัดฟันขอเรียนต่อ ม.ปลายสายสามัญต่อไป',
+        description: 'รักษาเส้นทางสายหลัก แต่ความเครียดเรื่องเงินของบ้านจะหนักขึ้นและต้องช่วยประหยัด',
+        effects: [
+          { type: 'SetJob', jobId: 'student', reason: 'ยืนยันเรียนต่อ ม.ปลาย ตามสายหลัก' },
+          { type: 'AddFlag', flag: 'chosen_stay_hs_budget', value: true, reason: 'เลือกเรียนต่อ ม.ปลาย แม้ครอบครัวตึงมือ' },
+          { type: 'ChangeResource', resource: 'stress', delta: 8, reason: 'กดดันจากภาระค่าใช้จ่ายของครอบครัว' },
+          { type: 'RecordEvidence', key: 'self_discipline', amount: 2, reason: 'ตั้งใจเรียนให้คุ้มค่าความเสียสละของที่บ้าน' },
+        ],
+      },
+      {
+        id: 'switch_vocational_track',
+        label: 'เปลี่ยนไปเรียนสายอาชีพ / ปวช. เพื่อฝึกวิชาติดตัวเร็ว',
+        description: 'เน้นทักษะปฏิบัติที่ต่อยอดทำงานไวขึ้น แทนเส้นทางสายวิชาการล้วน',
+        effects: [
+          { type: 'SetJob', jobId: 'student', reason: 'เข้าศึกษาต่อสายอาชีพเพื่อเน้นทักษะปฏิบัติ' },
+          { type: 'AddFlag', flag: 'vocational_track', value: true, reason: 'เลือกเส้นทางสายอาชีพ/ปวช.' },
+          { type: 'ChangeSkill', skill: 'craft', delta: 3, reason: 'ได้ลงมือฝึกงานช่างและปฏิบัติจริงตั้งแต่เริ่มเรียน' },
+          { type: 'ChangeResource', resource: 'stress', delta: 2, reason: 'ปรับตัวเข้ากับสายอาชีพ' },
+        ],
+      },
+      {
+        id: 'dropout_help_family',
+        label: 'พักการเรียนในระบบ ออกมาทำงานช่วยแบ่งเบาภาระที่บ้าน',
+        description: 'จบวุฒิ ม.3 แล้วออกมาทำงานเต็มเวลาหรือพาร์ตไทม์ (ยังไปต่อ กศน. ภายหลังได้)',
+        effects: [
+          { type: 'SetJob', jobId: 'unemployed', reason: 'ออกจากโรงเรียนหลังจบ ม.3 เพื่อเริ่มหางานช่วยครอบครัว' },
+          { type: 'AddFlag', flag: 'dropped_out_m3', value: true, reason: 'ยุติการเรียนในระบบหลังจบ ม.3' },
+          { type: 'ChangeResource', resource: 'stress', delta: 6, reason: 'ก้าวเข้าสู่โลกผู้ใหญ่เร็วกว่าเพื่อนรุ่นเดียวกัน' },
+          { type: 'RecordEvidence', key: 'family_time', amount: 2, reason: 'ตัดสินใจเสียสละช่วยพยุงฐานะครอบครัว' },
+        ],
+      },
+      {
+        id: 'work_and_nfe_upper',
+        label: 'ทำงานไปด้วย เรียน กศน. ม.ปลาย ควบคู่กันไป',
+        description: 'แบ่งเวลาวันหยุดไปเรียน กศน. ม.ปลาย เพื่อไม่ให้วุฒิการศึกษาขาดช่วง',
+        effects: [
+          { type: 'SetJob', jobId: 'unemployed', reason: 'ออกมาหางานทำควบคู่กับการเรียน กศน. ม.ปลาย' },
+          { type: 'AddFlag', flag: 'enroll_nfe_upper', value: true, reason: 'ลงทะเบียนเรียน กศน. ระดับ ม.ปลาย ควบคู่ทำงาน' },
+          { type: 'ChangeResource', resource: 'energy', delta: -8, reason: 'เหนื่อยจากการแบ่งเวลาทั้งงานและการเรียนนอกระบบ' },
+          { type: 'RecordEvidence', key: 'self_discipline', amount: 3, reason: 'ไม่ยอมทิ้งโอกาสทางการศึกษาแม้ต้องทำงาน' },
+        ],
+      },
+      {
+        id: 'apply_student_loan',
+        label: 'ขอกู้ กยศ. / ผ่อนผันค่าเทอมเพื่อเรียนต่อ',
+        description: 'ลดค่าใช้จ่ายรายเดือนลง แต่มีภาระหนี้ก้อนแรกติดตัว (8,000 บาท)',
+        effects: [
+          { type: 'SetJob', jobId: 'student', reason: 'ขอทุนกู้ยืมเพื่อการศึกษา (กยศ.) เรียนต่อ ม.ปลาย' },
+          { type: 'AddFlag', flag: 'applied_student_loan', value: true, reason: 'ใช้สิทธิ์ กยศ. พยุงค่าเทอม ม.ปลาย' },
+          { type: 'AddDebt', amount: 8000, reason: 'ยอดเริ่มต้นเงินกู้ยืมเพื่อการศึกษา กยศ.' },
+          { type: 'ChangeResource', resource: 'stress', delta: 4, reason: 'รับผิดชอบภาระกู้ยืมเพื่ออนาคตของตัวเอง' },
+        ],
+      },
+      {
+        id: 'special_gpa_scholarship',
+        label: 'สมัครทุนเรียนดีประจำอำเภอ (ปลดล็อกพิเศษจากเกรดเฉลี่ย 3.20+)',
+        description: 'ใช้ผลการเรียนที่สม่ำเสมอขอทุนยกเว้นค่าเล่าเรียนเต็มจำนวน',
+        requiredMinGpa: 3.2,
+        conditionalUnlockReasonTh: 'ต้องมีเกรดเฉลี่ยสะสมล่าสุดตั้งแต่ 3.20 ขึ้นไปจึงจะยื่นขอทุนเรียนดีได้',
+        effects: [
+          { type: 'SetJob', jobId: 'student', reason: 'ได้รับทุนเรียนดีเข้าศึกษาต่อระดับ ม.ปลาย' },
+          { type: 'AddFlag', flag: 'won_high_school_scholarship', value: true, reason: 'ได้รับทุนเรียนดี ม.ปลาย (ต้องรักษาเกรด >= 3.00)' },
+          { type: 'ChangeMoney', amount: 5000, category: 'event', reason: 'เงินสนับสนุนอุปกรณ์การเรียนจากทุนการศึกษา' },
+          { type: 'ChangeResource', resource: 'stress', delta: -6, reason: 'โล่งใจที่สามารถเรียนต่อได้โดยไม่เพิ่มภาระบ้าน' },
+        ],
+      },
+      {
+        id: 'special_talent_quota',
+        label: 'ใช้แฟ้มผลงานขอโควตาความสามารถพิเศษเรียนต่อฟรี (ปลดล็อกพิเศษจากพรสวรรค์)',
+        description: 'แสดงพรสวรรค์ที่ค้นพบแล้วด้านศิลปะ ดนตรี กีฬา การแสดง หรือการเขียน เพื่อรับทุนโควตา',
+        requiredAnyTalents: ['tal_art', 'tal_music', 'tal_athletic', 'tal_acting', 'tal_writing'],
+        conditionalUnlockReasonTh: 'ต้องค้นพบพรสวรรค์ด้านศิลปะ ดนตรี กีฬา การแสดง หรือการเขียนก่อนจึงจะยื่นโควตาได้',
+        effects: [
+          { type: 'SetJob', jobId: 'student', reason: 'เข้าเรียนต่อ ม.ปลาย ด้วยโควตาความสามารถพิเศษ' },
+          { type: 'AddFlag', flag: 'won_high_school_scholarship', value: true, reason: 'ได้รับทุนโควตาความสามารถพิเศษ' },
+          { type: 'ChangeRawStat', stat: 'charisma', delta: 2, reason: 'ภูมิใจที่ได้ใช้ความสามารถเฉพาะตัวช่วยครอบครัว' },
+          { type: 'ChangeResource', resource: 'stress', delta: -5, reason: 'มีเส้นทางเฉพาะตัวรองรับการเรียนต่อ' },
+        ],
+      },
+      {
+        id: 'special_academic_skill_bursary',
+        label: 'สอบชิงทุนมูลนิธิท้องถิ่นสายวิชาการ (ปลดล็อกพิเศษจากทักษะวิชาการ 28+)',
+        description: 'นำความแน่นด้านวิชาการเข้าสอบชิงทุนช่วยค่าเทอม',
+        requiredSkills: { academic: 28 },
+        conditionalUnlockReasonTh: 'ต้องมีทักษะวิชาการและคำนวณตั้งแต่ 28 ขึ้นไปจึงจะผ่านเกณฑ์สอบชิงทุน',
+        effects: [
+          { type: 'SetJob', jobId: 'student', reason: 'สอบผ่านทุนมูลนิธิเรียนต่อระดับ ม.ปลาย' },
+          { type: 'AddFlag', flag: 'won_high_school_scholarship', value: true, reason: 'สอบได้ทุนมูลนิธิการศึกษาท้องถิ่น' },
+          { type: 'ChangeMoney', amount: 4000, category: 'event', reason: 'เงินทุนการศึกษาจากมูลนิธิท้องถิ่น' },
+        ],
+      },
+      {
+        id: 'special_reliable_patron',
+        label: 'ผู้ใหญ่ที่เห็นความขยันออกปากอุปการะค่าเรียน (ปลดล็อกพิเศษจากความน่าเชื่อถือ 55+)',
+        description: 'ความประพฤติสม่ำเสมอทำให้ครูหรือญาติผู้ใหญ่ยื่นมือช่วยสนับสนุนค่าเทอม',
+        requiredMinRawStats: { reliability: 55 },
+        conditionalUnlockReasonTh: 'ต้องมีความน่าเชื่อถือตั้งแต่ 55 ขึ้นไปจึงจะมีผู้ใหญ่ไว้วางใจอุปการะ',
+        effects: [
+          { type: 'SetJob', jobId: 'student', reason: 'ได้รับการอุปการะค่าเทอม ม.ปลาย จากผู้ใหญ่ที่เอ็นดู' },
+          { type: 'AddFlag', flag: 'won_high_school_scholarship', value: true, reason: 'มีผู้อุปการะดูแลค่าเล่าเรียน ม.ปลาย' },
+          { type: 'ChangeResource', resource: 'stress', delta: -4, reason: 'อุ่นใจที่มีผู้ใหญ่คอยช่วยเหลือ' },
+        ],
+      },
+    ],
+    weight: 10,
+  },
   ...PLANNER_STORYLETS,
+  ...AGE_AND_EDU_STORYLETS,
 ];
 
 /**

@@ -33,7 +33,7 @@ export const PLANNER_STORYLETS: StoryletDef[] = [
         effects: [
           { type: 'ChangeMoney', amount: -1200, category: 'living', reason: 'ค่าเครื่องดื่มและปาร์ตี้ใหญ่กับเพื่อน' },
           { type: 'ChangeResource', resource: 'energy', delta: -12, reason: 'อยู่ดึกจนเกือบเช้า' },
-          { type: 'ChangeSkill', skill: 'socializing', delta: 1.5, reason: 'ทำความรู้จักผู้คนใหม่ๆ ในงาน' },
+          { type: 'ChangeSkill', skill: 'social', delta: 1.5, reason: 'ทำความรู้จักผู้คนใหม่ๆ ในงาน' },
           { type: 'RecordEvidence', key: 'night_out', amount: 2.5, reason: 'เที่ยวงานปาร์ตี้ใหญ่ยามค่ำคืน' },
         ],
       },
@@ -45,7 +45,7 @@ export const PLANNER_STORYLETS: StoryletDef[] = [
         effects: [
           { type: 'ChangeMoney', amount: -450, category: 'living', reason: 'ค่าอาหารว่างและเครื่องดื่มไม่มีแอลกอฮอล์' },
           { type: 'ChangeResource', resource: 'energy', delta: -4, reason: 'กลับบ้านก่อนดึกมาก' },
-          { type: 'ChangeSkill', skill: 'socializing', delta: 1, reason: 'พบปะพูดคุยอย่างมีสติ' },
+          { type: 'ChangeSkill', skill: 'social', delta: 1, reason: 'พบปะพูดคุยอย่างมีสติ' },
           { type: 'ChangeRawStat', stat: 'reliability', delta: 0.6, reason: 'คุมตัวเองได้แม้ในวงปาร์ตี้' },
         ],
       },
@@ -164,7 +164,7 @@ export const PLANNER_STORYLETS: StoryletDef[] = [
         id: 'reply_warmly',
         label: 'ทักตอบยาวๆ นัดคุยออนไลน์สั้นๆ',
         effects: [
-          { type: 'ChangeSkill', skill: 'socializing', delta: 0.5, reason: 'รักษาสายสัมพันธ์กับเพื่อนเก่า' },
+          { type: 'ChangeSkill', skill: 'social', delta: 0.5, reason: 'รักษาสายสัมพันธ์กับเพื่อนเก่า' },
           { type: 'ChangeResource', resource: 'energy', delta: -3, reason: 'สละเวลาส่วนตัวมาตอบแชต' },
         ],
       },
@@ -173,7 +173,7 @@ export const PLANNER_STORYLETS: StoryletDef[] = [
         label: 'ตอบสั้นๆ แล้วขอเก็บตัวอยู่เงียบๆ ต่อ',
         effects: [
           { type: 'RecordEvidence', key: 'solitude', amount: 1.5, reason: 'พอใจกับโลกส่วนตัวในห้อง' },
-          { type: 'ChangeSkill', skill: 'socializing', delta: -0.6, reason: 'ห่างเหินจากวงสนทนาเพื่อนฝูง' },
+          { type: 'ChangeSkill', skill: 'social', delta: -0.6, reason: 'ห่างเหินจากวงสนทนาเพื่อนฝูง' },
         ],
       },
     ],
@@ -206,7 +206,7 @@ export const PLANNER_STORYLETS: StoryletDef[] = [
           { type: 'ChangeMoney', amount: -300, category: 'living', reason: 'ค่าเครื่องดื่มและขนมที่คาเฟ่กับเพื่อน' },
           { type: 'ChangeResource', resource: 'stress', delta: -6, reason: 'ได้เปลี่ยนบรรยากาศรับแสงแดด' },
           { type: 'ChangeResource', resource: 'energy', delta: -5, reason: 'เหนื่อยจากการเดินทางและคุยยาว' },
-          { type: 'ChangeSkill', skill: 'socializing', delta: 1.4, reason: 'ฟื้นความคุ้นเคยในการพบปะผู้คน' },
+          { type: 'ChangeSkill', skill: 'social', delta: 1.4, reason: 'ฟื้นความคุ้นเคยในการพบปะผู้คน' },
         ],
       },
       {
@@ -214,7 +214,7 @@ export const PLANNER_STORYLETS: StoryletDef[] = [
         label: 'ปฏิเสธอย่างเกรงใจ ขอพักในพื้นที่ปลอดภัยต่อ',
         effects: [
           { type: 'RecordEvidence', key: 'solitude', amount: 2.5, reason: 'ยึดติดกับการอยู่คนเดียว' },
-          { type: 'ChangeSkill', skill: 'socializing', delta: -1.2, reason: 'ปฏิเสธโอกาสพบปะเพื่อนสนิท' },
+          { type: 'ChangeSkill', skill: 'social', delta: -1.2, reason: 'ปฏิเสธโอกาสพบปะเพื่อนสนิท' },
           { type: 'ChangeResource', resource: 'stress', delta: -2, reason: 'ไม่ต้องฝืนตัวเองออกจากบ้าน' },
         ],
       },
@@ -448,6 +448,7 @@ export const PLANNER_STORYLETS: StoryletDef[] = [
     importance: 7,
     conditions: {
       minAge: 18,
+      requireEmployed: true,
       minOvertimeWeeks: 8,
     },
     choices: [
@@ -488,6 +489,7 @@ export const PLANNER_STORYLETS: StoryletDef[] = [
     importance: 6,
     conditions: {
       minAge: 18,
+      requireEmployed: true,
       minOvertimeWeeks: 6,
       minStress: 72,
     },
@@ -578,10 +580,8 @@ export const PLANNER_STORYLETS: StoryletDef[] = [
     choices: [
       {
         id: 'buy_family_dessert',
-        label: 'แวะซื้อของหวานมาทานพร้อมหน้า (-300 บ.)',
-        costCash: 300,
+        label: 'ช่วยจัดโต๊ะน้ำชาและขนมในครัวมาทานพร้อมหน้ากับที่บ้าน',
         effects: [
-          { type: 'ChangeMoney', amount: -300, category: 'living', reason: 'ซื้อขนมฝากทุกคนในบ้าน' },
           { type: 'ChangeResource', resource: 'stress', delta: -6, reason: 'อบอุ่นใจกับรอยยิ้มของครอบครัว' },
           { type: 'RecordEvidence', key: 'family_time', amount: 2, reason: 'เติมความสัมพันธ์ดีๆ ในบ้าน' },
         ],
@@ -611,7 +611,7 @@ export const PLANNER_STORYLETS: StoryletDef[] = [
     sceneTag: 'home',
     importance: 7,
     conditions: {
-      minAge: 13,
+      minAge: 15,
       requiredEvidence: { hobby_focus: 6 },
       requiredAnyTraits: ['niche_obsessed', 'curious_learner', 'solitude_lover'],
       isMinorSafe: true,
@@ -728,7 +728,7 @@ export const PLANNER_STORYLETS: StoryletDef[] = [
           { type: 'ChangeResource', resource: 'energy', delta: -8, reason: 'ประชุมและประสานงานค่ายจนเย็น' },
           { type: 'ChangeResource', resource: 'stress', delta: 5, reason: 'ต้องรับผิดชอบงานส่วนรวมของชมรม' },
           { type: 'ChangeRawStat', stat: 'charisma', delta: 1.5, reason: 'ฝึกบทบาทผู้นำต่อหน้าสมาชิก' },
-          { type: 'ChangeSkill', skill: 'socializing', delta: 1.5, reason: 'ประสานงานกับเพื่อนต่างคณะ' },
+          { type: 'ChangeSkill', skill: 'social', delta: 1.5, reason: 'ประสานงานกับเพื่อนต่างคณะ' },
           { type: 'RecordEvidence', key: 'social_fun', amount: 2, reason: 'ขยับบทบาทสำคัญในกิจกรรมมหาวิทยาลัย' },
         ],
       },
@@ -770,6 +770,7 @@ export const PLANNER_STORYLETS: StoryletDef[] = [
         effects: [
           { type: 'ChangeResource', resource: 'energy', delta: -3, reason: 'ช่วยอธิบายข้อสอบให้เพื่อนฟังช่วงพัก' },
           { type: 'ChangeRawStat', stat: 'charisma', delta: 1, reason: 'เข้ากับเพื่อนในห้องได้ดีขึ้น' },
+          { type: 'ModifyTeacherGpa', delta: 0.1, reason: 'คุณครูเอ่ยปากชมความขยันหน้าชั้นเรียน' },
           { type: 'RecordEvidence', key: 'self_discipline', amount: 1.5, reason: 'รักษาความขยันและน้ำใจในห้องเรียน' },
         ],
       },
@@ -846,10 +847,8 @@ export const PLANNER_STORYLETS: StoryletDef[] = [
     choices: [
       {
         id: 'adjust_bedtime_routine',
-        label: 'จัดห้องนอนใหม่และเข้านอนไวขึ้น (-200 บ.)',
-        costCash: 200,
+        label: 'จัดห้องนอนให้เงียบ ดื่มน้ำอุ่น และเข้านอนไวขึ้น',
         effects: [
-          { type: 'ChangeMoney', amount: -200, category: 'living', reason: 'ซื้อเครื่องดื่มอุ่นๆ และของช่วยผ่อนคลายก่อนนอน' },
           { type: 'ChangeResource', resource: 'energy', delta: 12, reason: 'เริ่มฟื้นชั่วโมงการนอนให้กลับมาปกติ' },
           { type: 'ChangeResource', resource: 'stress', delta: -6, reason: 'ลดอาการมึนล้าสะสม' },
           { type: 'RecordEvidence', key: 'rest_recovery', amount: 2.5, reason: 'หันกลับมาดูแลการนอนอย่างจริงจัง' },

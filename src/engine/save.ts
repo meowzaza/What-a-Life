@@ -1,15 +1,33 @@
+import { ALL_SKILL_IDS, DISCOVERED_SKILL_IDS } from '../data/skills';
 import { createEmploymentForJob } from '../data/thaiData';
 import { buildCharacterAppearance } from './appearance';
 import { createDefaultStandingOrders } from './autopilot';
 import { formatShortThaiDate } from './clock';
 import { checkSideGigEligibility } from './economy';
+import { createInitialEducationState } from './education';
 import { getLifeSubStageId } from './lifeStage';
+import { TALENT_MAX_ACTIVE_SLOTS, TALENT_VAULT_MAX_SLOTS } from '../data/talents';
 import { appendTimeline } from './log';
-import { createInitialSkillTrainingState } from './skillTraining';
+import {
+  buildSkillStatesFromCompatSkills,
+  convertLevelToCompatScore,
+  createInitialSkillTrainingState,
+  zeroSkillRecord,
+} from './skillTraining';
 import { migratePlanner } from './planner';
 import { evaluatePresetAvailability } from './timeAlloc';
 import { initTraitsForPerson } from './traits';
-import type { ActionRecord, GameState, LifeGenRequest, LifestylePresetId, StandingOrders } from './types';
+import type {
+  ActionRecord,
+  DiscoveredSkillId,
+  GameState,
+  LifeGenRequest,
+  LifestylePresetId,
+  SkillKey,
+  Skills,
+  SkillTrainingState,
+  StandingOrders,
+} from './types';
 
 export interface SaveSlotData {
   slotId: string; // 'autosave' | 'slot_1' | 'slot_2' | 'slot_3'
@@ -70,11 +88,169 @@ export function buildSavePayload(
   };
 }
 
+function mapLegacySkillKey(rawKey: string): SkillKey | undefined {
+  if (rawKey === 'socializing') return 'social';
+  if (rawKey === 'sales' || rawKey === 'finance') return 'business';
+  if (rawKey === 'english') return 'foreign_lang';
+  if (rawKey === 'cooking') return 'culinary';
+  if ((ALL_SKILL_IDS as string[]).includes(rawKey)) return rawKey as SkillKey;
+  return undefined;
+}
+
+function migrateSkillRecordMap(rawMap: Record<string, number> | undefined): Record<SkillKey, number> {
+  const out = zeroSkillRecord();
+  if (!rawMap) return out;
+  for (const k of ALL_SKILL_IDS) {
+    if (typeof rawMap[k] === 'number') {
+      out[k] = rawMap[k];
+    }
+  }
+  if (rawMap.social === undefined && typeof rawMap.socializing === 'number') {
+    out.social = rawMap.socializing;
+  }
+  if (rawMap.business === undefined) {
+    const oldSales = typeof rawMap.sales === 'number' ? rawMap.sales : 0;
+    const oldFin = typeof rawMap.finance === 'number' ? rawMap.finance : 0;
+    if (oldSales > 0 || oldFin > 0) {
+      out.business = Math.max(oldSales, oldFin);
+    }
+  }
+  if (rawMap.foreign_lang === undefined && typeof rawMap.english === 'number') {
+    out.foreign_lang = rawMap.english;
+  }
+  if (rawMap.culinary === undefined && typeof rawMap.cooking === 'number') {
+    out.culinary = rawMap.cooking;
+  }
+  return out;
+}
+
+function migrateSkillsAndTrainingFromSnapshot(snapshot: GameState): {
+  skills: Skills;
+  skillTraining: SkillTrainingState;
+} {
+  const rawSkills = (snapshot.character.skills ?? {}) as unknown as Record<string, number>;
+  const migratedSkills: Skills = migrateSkillRecordMap(rawSkills);
+
+  const rawTraining = snapshot.skillTraining as unknown as
+    | (Partial<SkillTrainingState> & {
+        xp?: Record<string, number>;
+        lastPracticedWeek?: Record<string, number>;
+        lastLoggedCap?: Record<string, 30 | 60>;
+        focus?: string[];
+        course?: { skillId: string; weeksLeft: number; totalWeeks: number; feePerWeek: number } | null;
+      })
+    | undefined;
+
+  const focusMapped: SkillKey[] = [];
+  for (const f of rawTraining?.focus ?? []) {
+    const mapped = mapLegacySkillKey(f);
+    if (mapped && !focusMapped.includes(mapped)) {
+      focusMapped.push(mapped);
+    }
+  }
+
+  let migratedCourse = null;
+  if (rawTraining?.course) {
+    const mappedCourseSkill = mapLegacySkillKey(rawTraining.course.skillId);
+    if (mappedCourseSkill) {
+      migratedCourse = {
+        ...rawTraining.course,
+        skillId: mappedCourseSkill,
+      };
+    }
+  }
+
+  const discoveredSet = new Set<DiscoveredSkillId>(rawTraining?.discoveredSkills ?? []);
+  for (const discKey of DISCOVERED_SKILL_IDS) {
+    if ((migratedSkills[discKey] ?? 0) > 0) {
+      discoveredSet.add(discKey);
+    }
+  }
+
+  const migratedLastLoggedCap: Partial<Record<SkillKey, 30 | 60>> = {};
+  if (rawTraining?.lastLoggedCap) {
+    for (const [k, v] of Object.entries(rawTraining.lastLoggedCap)) {
+      const mapped = mapLegacySkillKey(k);
+      if (mapped && (v === 30 || v === 60)) {
+        migratedLastLoggedCap[mapped] = v;
+      }
+    }
+  }
+
+  const skillStates = buildSkillStatesFromCompatSkills(migratedSkills, rawTraining?.skillStates);
+
+  // Keep compat score aligned with migrated Lv.1-5 state if synthesized from legacy save
+  if (!rawTraining?.skillStates) {
+    for (const sk of ALL_SKILL_IDS) {
+      migratedSkills[sk] = convertLevelToCompatScore(skillStates[sk]);
+    }
+  }
+
+  const skillTraining = createInitialSkillTrainingState({
+    ...rawTraining,
+    focus: focusMapped,
+    course: migratedCourse,
+    skillStates,
+    xp: migrateSkillRecordMap(rawTraining?.xp),
+    lastPracticedWeek: migrateSkillRecordMap(rawTraining?.lastPracticedWeek),
+    discoveredSkills: Array.from(discoveredSet),
+    lastLoggedCap: migratedLastLoggedCap,
+  });
+
+  return { skills: migratedSkills, skillTraining };
+}
+
 export function hydrateLoadedGameState(
   snapshot: GameState,
   lifeGenRequest?: LifeGenRequest
 ): GameState {
   let character = snapshot.character;
+
+  // Phase 3.3.1-FIX: Migrate legacy 8-key or 13-key skills -> Lv.1-5 skillStates & initialize talents/vault/educationState
+  const { skills: migratedSkills, skillTraining: nextSkillTraining } =
+    migrateSkillsAndTrainingFromSnapshot(snapshot);
+  const rawEdu =
+    character.educationState ??
+    createInitialEducationState(
+      character.ageYears,
+      character.education,
+      character.background.familyWealth,
+      snapshot.seed
+    ).educationState;
+  const migratedEducationState = {
+    ...rawEdu,
+    gpaHistory: rawEdu.gpaHistory ?? [],
+    teacherTermDelta: rawEdu.teacherTermDelta ?? 0,
+    trackChangeCountThisYear: rawEdu.trackChangeCountThisYear ?? 0,
+  };
+
+  // Cap revealed active talents at 3 and overflow any extras into talentVault (max 5)
+  const existingTalents = [...(character.talents ?? [])];
+  const existingVault = [...(character.talentVault ?? [])];
+  const keptTalents = [];
+  let revealedActiveCount = 0;
+  for (const t of existingTalents) {
+    if (t.revealed) {
+      if (revealedActiveCount < TALENT_MAX_ACTIVE_SLOTS) {
+        keptTalents.push(t);
+        revealedActiveCount++;
+      } else if (existingVault.length < TALENT_VAULT_MAX_SLOTS) {
+        existingVault.push(t);
+      }
+    } else {
+      keptTalents.push(t);
+    }
+  }
+
+  character = {
+    ...character,
+    skills: migratedSkills,
+    talents: keptTalents,
+    talentVault: existingVault.slice(0, TALENT_VAULT_MAX_SLOTS),
+    limitations: character.limitations ?? [],
+    educationState: migratedEducationState,
+    lifeHistory: character.lifeHistory ?? [],
+  };
 
   if (!character.appearance?.charId) {
     const appearance = buildCharacterAppearance(
@@ -134,7 +310,6 @@ export function hydrateLoadedGameState(
       }
     : defaultOrders;
   const nextSettings = { pubVisitAge: 20 as const, ...snapshot.settings };
-  const nextSkillTraining = createInitialSkillTrainingState(snapshot.skillTraining);
   const nextSideGigRecord = snapshot.sideGigRecord ?? null;
 
   let hydrated: GameState = {

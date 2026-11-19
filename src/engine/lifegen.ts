@@ -16,16 +16,19 @@ import {
 } from '../data/thaiData';
 import { buildCharacterAppearance } from './appearance';
 import { createDate } from './clock';
+import { createInitialEducationState } from './education';
 import { recalculateEconomyDerived } from './economy';
 import { getLifeSubStageId } from './lifeStage';
 import { clamp, nextRandom, normalizeSeed, pickOne, randInt, randNormalApprox, weightedPick } from './rng';
 import { computeLifeIndices } from './stats';
+import { rollInitialTalentsAndLimitations } from './talents';
 import { initTraitsForPerson } from './traits';
 import type {
   AtAgeLifeOptions,
   BackgroundProfile,
   BackstorySummary,
   CustomLifeOptions,
+  DiscoveredSkillId,
   EconomyState,
   EducationLevel,
   EvidenceState,
@@ -43,6 +46,7 @@ export interface GeneratedLife {
   person: Person;
   economy: EconomyState;
   starterEvidence: EvidenceState;
+  initialDiscoveredSkills: DiscoveredSkillId[];
   startYearCE: number;
   rngState: number;
 }
@@ -172,7 +176,7 @@ function buildInitialSkills(
   ageYears: number,
   education: EducationLevel,
   wealth: FamilyWealthTier
-): { skills: Skills; rngState: number } {
+): { skills: Skills; discoveredSkills: DiscoveredSkillId[]; rngState: number } {
   let state = rngState;
   const eduRank = EDUCATION_RANK[education];
   const ageFactor = Math.max(0, ageYears - 12);
@@ -184,18 +188,37 @@ function buildInitialSkills(
     return Math.round(clamp(base + r.value, 0, 85));
   };
 
+  const discoveredSkills: DiscoveredSkillId[] = [];
+  const startForeignLang =
+    ageYears >= 15 || wealth === 'wealthy'
+      ? rollSkill(eduRank * 4 + wealthEngBonus + ageFactor * 0.4)
+      : 0;
+  if (startForeignLang > 0) {
+    discoveredSkills.push('foreign_lang');
+  }
+
+  const startCulinary = ageYears >= 18 ? rollSkill(4 + ageFactor * 0.4) : 0;
+  if (startCulinary > 0) {
+    discoveredSkills.push('culinary');
+  }
+
   const skills: Skills = {
-    english: rollSkill(eduRank * 4 + wealthEngBonus + ageFactor * 0.4),
-    sales: rollSkill(ageFactor * 0.6),
-    finance: rollSkill(ageFactor * 0.5 + (wealth === 'wealthy' ? 6 : 0)),
+    academic: rollSkill(eduRank * 6 + ageFactor * 0.2),
     tech: rollSkill(eduRank * 3 + ageFactor * 0.5),
     craft: rollSkill(wealth === 'working_poor' || wealth === 'lower_middle' ? 10 + ageFactor * 0.5 : ageFactor * 0.3),
-    cooking: rollSkill(6 + ageFactor * 0.4),
-    socializing: rollSkill(10 + ageFactor * 0.5),
-    academic: rollSkill(eduRank * 6 + ageFactor * 0.2),
+    social: rollSkill(10 + ageFactor * 0.5),
+    business: rollSkill(ageFactor * 0.55 + (wealth === 'wealthy' ? 6 : 0)),
+    athletics: rollSkill(6 + ageFactor * 0.3),
+    foreign_lang: startForeignLang,
+    culinary: startCulinary,
+    visual_arts: 0,
+    music_vocal: 0,
+    performing_acting: 0,
+    dance_thai_modern: 0,
+    literature_writing: 0,
   };
 
-  return { skills, rngState: state };
+  return { skills, discoveredSkills, rngState: state };
 }
 
 function generateBackground(rngState: number, opts?: CustomLifeOptions): { bg: BackgroundProfile; gender: Gender; firstName: string; lastName: string; nickname: string; rngState: number } {
@@ -431,6 +454,7 @@ export function generateLife(request: LifeGenRequest): GeneratedLife {
 
   const skRes = buildInitialSkills(state, ageYears, education, bg.familyWealth);
   const skills = skRes.skills;
+  const initialDiscoveredSkills = [...skRes.discoveredSkills];
   state = skRes.rngState;
 
   // Cash & Debt (เด็กอายุ < 15 ไม่มีเงินสดหรือหนี้ส่วนตัว พ่อแม่ดูแลทั้งหมด)
@@ -533,6 +557,39 @@ export function generateLife(request: LifeGenRequest): GeneratedLife {
 
   const traitInit = initTraitsForPerson(state, bg.temperament, ageYears);
   state = traitInit.rngState;
+  const talentInit = rollInitialTalentsAndLimitations(
+    state,
+    bg.familyWealth,
+    bg.geneticHealth,
+    ageYears
+  );
+  state = talentInit.rngState;
+  const eduInit = createInitialEducationState(
+    ageYears,
+    education,
+    bg.familyWealth,
+    state
+  );
+  state = eduInit.rngState;
+  if (
+    eduInit.educationState.schoolTier === 'school_international' &&
+    !initialDiscoveredSkills.includes('foreign_lang')
+  ) {
+    initialDiscoveredSkills.push('foreign_lang');
+  }
+  if (
+    eduInit.educationState.highSchoolTrack === 'arts_lang' &&
+    !initialDiscoveredSkills.includes('foreign_lang')
+  ) {
+    initialDiscoveredSkills.push('foreign_lang');
+  }
+  if (
+    eduInit.educationState.highSchoolTrack === 'arts_fine' &&
+    eduInit.educationState.fineArtSkill &&
+    !initialDiscoveredSkills.includes(eduInit.educationState.fineArtSkill)
+  ) {
+    initialDiscoveredSkills.push(eduInit.educationState.fineArtSkill);
+  }
   const lifeStage = getLifeSubStageId(ageYears);
 
   const person: Person = {
@@ -570,6 +627,9 @@ export function generateLife(request: LifeGenRequest): GeneratedLife {
     emergentTraits: traitInit.emergentTraits,
     innerTension: traitInit.innerTension,
     reputationView: traitInit.reputationView,
+    talents: talentInit.talents,
+    limitations: talentInit.limitations,
+    educationState: eduInit.educationState,
     flags: {},
     appearance: buildCharacterAppearance(
       request.seed,
@@ -620,6 +680,7 @@ export function generateLife(request: LifeGenRequest): GeneratedLife {
     person,
     economy,
     starterEvidence: traitInit.starterEvidence,
+    initialDiscoveredSkills,
     startYearCE,
     rngState: state,
   };

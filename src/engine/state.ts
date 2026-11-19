@@ -1,5 +1,5 @@
 import { LIFESTYLE_PRESETS_BY_ID } from '../data/lifestylePresets';
-import { SKILL_TRAINING_CONFIG } from '../data/skillTraining';
+import { SKILL_LEVEL_CONFIG, SKILL_TRAINING_CONFIG } from '../data/skillTraining';
 import { createEmploymentForJob, HOUSINGS, JOBS, SKILL_LABELS, WORK_SHIFT_LABELS_TH } from '../data/thaiData';
 import { STORYLET_CATALOG } from '../data/storylets/catalog';
 import { UI_TEXT } from '../data/uiText';
@@ -21,11 +21,25 @@ import {
   checkJobEligibility,
   recalculateEconomyDerived,
 } from './economy';
+import {
+  applyChangeSchoolTier,
+  applyChooseHighSchoolTrack,
+  applyEnrollRotc,
+  applyEnrollSecondChanceEdu,
+  pushLifeHistory,
+  resolveEducationPromptChoice,
+} from './education';
 import { generateLife } from './lifegen';
 import { appendTimeline, applyEffects, summarizeEffects } from './log';
 import { stepOneTick } from './pipeline';
 import { clamp } from './rng';
-import { canEnrollCourse, createInitialSkillTrainingState } from './skillTraining';
+import {
+  buildSkillStatesFromCompatSkills,
+  canEnrollCourse,
+  createInitialSkillTrainingState,
+  isSkillVisible,
+} from './skillTraining';
+import { applySwapTalentSlot, stampTalentSwapWindow } from './talents';
 import { computeLifeIndices } from './stats';
 import {
   applyLifestylePreset,
@@ -66,7 +80,10 @@ export function createInitialGameState(request: LifeGenRequest): GameState {
     employment: createEmploymentForJob(generated.economy.jobId),
     lifestylePresetId: 'balanced',
     sideGigRecord: null,
-    skillTraining: createInitialSkillTrainingState(),
+    skillTraining: createInitialSkillTrainingState({
+      discoveredSkills: generated.initialDiscoveredSkills,
+      skillStates: buildSkillStatesFromCompatSkills(generated.person.skills),
+    }),
     evidence: generated.starterEvidence,
     timeAllocation: getDefaultTimeAllocation(generated.person.ageYears),
     standingOrders: createDefaultStandingOrders(generated.person),
@@ -129,20 +146,20 @@ function buildGatedActionEffects(actionId: string, energyCost: number, freeTimeC
       return [
         ...baseCost,
         { type: 'ChangeRawStat', stat: 'charisma', delta: 1, reason: 'กล้าแสดงออกต่อหน้าคนจำนวนมาก' },
-        { type: 'ChangeSkill', skill: 'socializing', delta: 1.5, reason: 'ฝึกพูดบนเวที' },
+        { type: 'ChangeSkill', skill: 'social', delta: 1.5, reason: 'ฝึกพูดบนเวที' },
         { type: 'RecordEvidence', key: 'praised', amount: 3, reason: 'ได้รับเสียงตอบรับบนเวที' },
       ];
     case 'social_networking':
       return [
         ...baseCost,
-        { type: 'ChangeSkill', skill: 'socializing', delta: 1.5, reason: 'พบปะแลกเปลี่ยนคอนเนกชัน' },
+        { type: 'ChangeSkill', skill: 'social', delta: 1.5, reason: 'พบปะแลกเปลี่ยนคอนเนกชัน' },
         { type: 'RecordEvidence', key: 'social_fun', amount: 2, reason: 'สนุกกับวงสนทนา' },
         { type: 'RecordEvidence', key: 'help_others', amount: 1, reason: 'แบ่งปันคำแนะนำกับคนรู้จัก' },
       ];
     case 'strict_saving_challenge':
       return [
         ...baseCost,
-        { type: 'ChangeSkill', skill: 'finance', delta: 1, reason: 'คุมงบรายจ่ายรายสัปดาห์เข้มงวด' },
+        { type: 'ChangeSkill', skill: 'business', delta: 1, reason: 'คุมงบรายจ่ายรายสัปดาห์เข้มงวด' },
         { type: 'RecordEvidence', key: 'disciplined_saving', amount: 3, reason: 'ผ่านชาเลนจ์งดรายจ่ายฟุ่มเฟือย' },
       ];
     case 'therapy_reflection':
@@ -321,6 +338,13 @@ export function dispatchPlayerAction(state: GameState, action: PlayerAction): Ac
       } else {
         next = sanitizeTimeAllocation(next, next.timeAllocation, true).state;
       }
+      next = stampTalentSwapWindow(next, `job_${action.jobId}_${next.date.totalDays}`);
+      next = pushLifeHistory(next, {
+        id: `job_apply_${action.jobId}_${next.date.totalDays}`,
+        kind: 'career',
+        titleTh: `เริ่มทำงาน: ${job.title}`,
+        detailTh: `รายได้ประจำ ${job.monthlySalary.toLocaleString('th-TH')} บาท/เดือน`,
+      });
       next = appendTimeline(next, {
         category: 'work',
         title: `เปลี่ยนสายงาน: ${job.title}`,
@@ -386,6 +410,13 @@ export function dispatchPlayerAction(state: GameState, action: PlayerAction): Ac
           message: `เลือกโฟกัสได้สูงสุด ${SKILL_TRAINING_CONFIG.maxFocusSkills} ทักษะ`,
         };
       }
+      if (uniqueFocus.some((sk) => !isSkillVisible(state, sk))) {
+        return {
+          state,
+          accepted: false,
+          message: 'ยังไม่ค้นพบทักษะบางรายการที่เลือก กรุณาปลดล็อกก่อนตั้งเป็นโฟกัส',
+        };
+      }
       const prevTraining = createInitialSkillTrainingState(state.skillTraining);
       return {
         state: {
@@ -401,8 +432,12 @@ export function dispatchPlayerAction(state: GameState, action: PlayerAction): Ac
     }
 
     case 'ENROLL_SKILL_COURSE': {
-      if (!SKILL_TRAINING_CONFIG.courseDurations.includes(action.weeks)) {
-        return { state, accepted: false, message: 'ระยะเวลาคอร์สไม่ถูกต้อง (เลือกได้ 4, 8 หรือ 12 สัปดาห์)' };
+      if (action.weeks !== SKILL_LEVEL_CONFIG.courseFixedWeeks) {
+        return {
+          state,
+          accepted: false,
+          message: `ระยะเวลาคอร์สไม่ถูกต้อง (เปิดสอนเฉพาะคอร์สมาตรฐาน ${SKILL_LEVEL_CONFIG.courseFixedWeeks} สัปดาห์)`,
+        };
       }
       const gate = canEnrollCourse(state, action.skillId);
       if (!gate.allowed) {
@@ -437,19 +472,25 @@ export function dispatchPlayerAction(state: GameState, action: PlayerAction): Ac
             weeksLeft: action.weeks,
             totalWeeks: action.weeks,
             feePerWeek,
+            missedWeeks: 0,
           },
         },
       };
       next = appendTimeline(next, {
         category: 'life',
         title: `ลงคอร์ส${skillMeta.label} (${action.weeks} สัปดาห์)`,
-        description: `ค่าเรียนสัปดาห์ละ ${feePerWeek.toLocaleString('th-TH')} บาท (หักสัปดาห์แรกแล้ว) เพื่อปลดล็อกเพดานระดับ 30–59`,
+        description: `ค่าเรียนสัปดาห์ละ ${feePerWeek.toLocaleString('th-TH')} บาท (รวม ${SKILL_LEVEL_CONFIG.courseTotalFee.toLocaleString('th-TH')} บาท) เพื่อปลดล็อกขั้นคอร์สถึง Lv.4 และรับใบประกาศนียบัตร`,
       });
       return {
         state: next,
         accepted: true,
         message: `ลงคอร์ส${skillMeta.label} ${action.weeks} สัปดาห์เรียบร้อยแล้ว`,
       };
+    }
+
+    case 'SWAP_TALENT_SLOT': {
+      const res = applySwapTalentSlot(state, action.activeIdx, action.vaultIdx);
+      return { state: res.state, accepted: res.accepted, message: res.message };
     }
 
     case 'BORROW_MONEY': {
@@ -514,12 +555,47 @@ export function dispatchPlayerAction(state: GameState, action: PlayerAction): Ac
         return { state, accepted: false, message: choice.disabledReason ?? 'ตัวเลือกนี้ยังไม่พร้อมใช้งาน' };
       }
 
+      const eduHandled = resolveEducationPromptChoice(state, state.pendingPrompt, action.choiceId);
+      if (eduHandled) {
+        eduHandled.economy = recalculateEconomyDerived(eduHandled.character, eduHandled.economy);
+        eduHandled.character.indices = computeLifeIndices(eduHandled.character, eduHandled.economy);
+        return { state: eduHandled, accepted: true };
+      }
+
       const promptStoryletId = state.pendingPrompt.storyletId;
       const promptCategory = state.pendingPrompt.category;
 
       // If storylet event, resolve via director to handle twists, cash costs, and StartScene
       if (promptStoryletId || choice.twistChance || choice.costCash) {
         let next = resolveStoryletChoice(state, action.choiceId);
+        // Sync Phase 3.3.1 educationState triggers from crisis/scholarship flags
+        const prevFlags = state.character.flags ?? {};
+        const nextFlags = next.character.flags ?? {};
+        if (!prevFlags.enroll_nfe_upper && nextFlags.enroll_nfe_upper && next.economy.jobId !== 'student') {
+          const nfeRes = applyEnrollSecondChanceEdu(next, 'nfe_upper');
+          if (nfeRes.accepted) next = nfeRes.state;
+        }
+        if (next.character.educationState) {
+          let updatedEdu = next.character.educationState;
+          let changed = false;
+          if (!prevFlags.applied_student_loan && nextFlags.applied_student_loan) {
+            updatedEdu = { ...updatedEdu, hasStudentLoan: true };
+            changed = true;
+          }
+          if (!prevFlags.won_high_school_scholarship && nextFlags.won_high_school_scholarship) {
+            updatedEdu = { ...updatedEdu, hasScholarship: true, scholarshipMinGpa: 3.0 };
+            changed = true;
+          }
+          if (changed) {
+            next = {
+              ...next,
+              character: {
+                ...next.character,
+                educationState: updatedEdu,
+              },
+            };
+          }
+        }
         next.economy = recalculateEconomyDerived(next.character, next.economy);
         next.character.indices = computeLifeIndices(next.character, next.economy);
         next = {
@@ -816,6 +892,50 @@ export function dispatchPlayerAction(state: GameState, action: PlayerAction): Ac
         accepted: true,
         message: 'ลบหมุดนัดหมายออกจากปฏิทินแล้ว',
       };
+    }
+
+    case 'SET_ACTIVITY_SUBFOCUS': {
+      const basePlanner = state.planner ?? createInitialPlannerState(state);
+      const nextTags = {
+        ...(basePlanner.activitySkillTags ?? {}),
+        [action.activityId]: action.tagId,
+      };
+      return {
+        state: {
+          ...state,
+          planner: {
+            ...basePlanner,
+            activitySkillTags: nextTags,
+          },
+        },
+        accepted: true,
+        message: 'ปรับแนวทางการฝึกกิจกรรมเรียบร้อยแล้ว',
+      };
+    }
+
+    case 'CHOOSE_HIGH_SCHOOL_TRACK': {
+      const res = applyChooseHighSchoolTrack(
+        state,
+        action.track,
+        action.fineArtSkill,
+        action.vocationalBranch
+      );
+      return { state: res.state, accepted: res.accepted, message: res.message };
+    }
+
+    case 'ENROLL_ROTC': {
+      const res = applyEnrollRotc(state, action.enroll);
+      return { state: res.state, accepted: res.accepted, message: res.message };
+    }
+
+    case 'CHANGE_SCHOOL_TIER': {
+      const res = applyChangeSchoolTier(state, action.schoolTier);
+      return { state: res.state, accepted: res.accepted, message: res.message };
+    }
+
+    case 'ENROLL_SECOND_CHANCE_EDU': {
+      const res = applyEnrollSecondChanceEdu(state, action.program);
+      return { state: res.state, accepted: res.accepted, message: res.message };
     }
 
     case 'DEV_SET_PLANNER_STREAKS': {
